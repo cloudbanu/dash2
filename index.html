@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Work Manager Pro</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#1f2937">
+    <link rel="icon" href="logo.png" type="image/png">
+    <style>
+        /* Custom styles for professional look */
+        .card-shadow { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); }
+        .card-shadow:hover { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15); }
+        .priority-high { border-left: 4px solid #ef4444; }
+        .priority-medium { border-left: 4px solid #f59e0b; }
+        .priority-low { border-left: 4px solid #10b981; }
+        .avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+        .avatar-lg { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <!-- SVG Icons -->
+    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+        <defs>
+            <symbol id="dashboard-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"/>
+                <rect x="14" y="3" width="7" height="7"/>
+                <rect x="14" y="14" width="7" height="7"/>
+                <rect x="3" y="14" width="7" height="7"/>
+            </symbol>
+            <symbol id="work-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14,2 14,8 20,8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10,9 9,9 8,9"/>
+            </symbol>
+            <symbol id="add-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="16"/>
+                <line x1="8" y1="12" x2="16" y2="12"/>
+            </symbol>
+            <symbol id="edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </symbol>
+            <symbol id="view-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+            </symbol>
+            <symbol id="delete-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3,6 5,6 21,6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                <line x1="10" y1="11" x2="10" y2="17"/>
+                <line x1="14" y1="11" x2="14" y2="17"/>
+            </symbol>
+            <symbol id="calendar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+            </symbol>
+            <symbol id="user-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+            </symbol>
+            <symbol id="phone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+            </symbol>
+            <symbol id="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </symbol>
+            <symbol id="logout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16,17 21,12 16,7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+            </symbol>
+            <symbol id="filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="22,3 2,3 10,12.46 10,19 14,21 14,12.46"/>
+            </symbol>
+        </defs>
+    </svg>
+
+    <!-- Login Screen -->
+    <div id="loginScreen" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 to-purple-700 px-4">
+        <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl w-full max-w-md">
+            <div class="text-center mb-8">
+                <img src="logo.png" alt="Logo" class="mx-auto h-16 w-16 mb-4 rounded-xl shadow-lg">
+                <h1 class="text-2xl font-bold text-gray-900">Work Manager Pro</h1>
+                <p class="text-gray-600 mt-2">Select your profile to continue</p>
+            </div>
+            
+            <div class="space-y-3">
+                <button onclick="login('Irshad', 'admin')" class="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 px-4 rounded-xl font-medium hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center space-x-3">
+                    <img src="irshad.jpg" alt="Irshad" class="avatar">
+                    <div class="text-left flex-1">
+                        <div class="font-semibold">Irshad</div>
+                        <div class="text-xs opacity-90">Administrator</div>
+                    </div>
+                </button>
+                <button onclick="login('Niyas', 'staff')" class="w-full bg-gradient-to-r from-green-500 to-teal-600 text-white py-3 px-4 rounded-xl font-medium hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center space-x-3">
+                    <img src="niyas.jpg" alt="Niyas" class="avatar">
+                    <div class="text-left flex-1">
+                        <div class="font-semibold">Niyas</div>
+                        <div class="text-xs opacity-90">Staff Member</div>
+                    </div>
+                </button>
+                <button onclick="login('Muhammed', 'staff')" class="w-full bg-gradient-to-r from-green-500 to-teal-600 text-white py-3 px-4 rounded-xl font-medium hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center space-x-3">
+                    <img src="muhammed.jpg" alt="Muhammed" class="avatar">
+                    <div class="text-left flex-1">
+                        <div class="font-semibold">Muhammed</div>
+                        <div class="text-xs opacity-90">Staff Member</div>
+                    </div>
+                </button>
+                <button onclick="login('Najil', 'staff')" class="w-full bg-gradient-to-r from-green-500 to-teal-600 text-white py-3 px-4 rounded-xl font-medium hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center space-x-3">
+                    <img src="najil.jpg" alt="Najil" class="avatar">
+                    <div class="text-left flex-1">
+                        <div class="font-semibold">Najil</div>
+                        <div class="text-xs opacity-90">Staff Member</div>
+                    </div>
+                </button>
+                <button onclick="login('Safvan', 'staff')" class="w-full bg-gradient-to-r from-green-500 to-teal-600 text-white py-3 px-4 rounded-xl font-medium hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center space-x-3">
+                    <img src="safvan.jpg" alt="Safvan" class="avatar">
+                    <div class="text-left flex-1">
+                        <div class="font-semibold">Safvan</div>
+                        <div class="text-xs opacity-90">Staff Member</div>
+                    </div>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="mainApp" class="hidden min-h-screen">
+        <!-- Header -->
+        <header class="bg-white shadow-lg border-b border-gray-200 sticky top-0 z-40">
+            <div class="max-w-7xl mx-auto px-4 py-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <img src="logo.png" alt="Logo" class="h-8 w-8 sm:h-10 sm:w-10 rounded-lg">
+                        <div>
+                            <h1 class="text-lg sm:text-xl font-bold text-gray-900">Work Manager Pro</h1>
+                            <div class="flex items-center space-x-2">
+                                <img id="userAvatar" src="" alt="User" class="w-5 h-5 rounded-full">
+                                <p class="text-xs sm:text-sm text-gray-600">Welcome, <span id="userName" class="font-medium"></span></p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-right">
+                        <div id="currentTime" class="text-sm sm:text-lg font-bold text-blue-600"></div>
+                        <div id="currentDate" class="text-xs sm:text-sm text-gray-600"></div>
+                    </div>
+                    
+                    <button onclick="logout()" class="bg-red-500 text-white px-3 py-2 sm:px-4 rounded-lg hover:bg-red-600 transition-colors text-sm flex items-center space-x-1">
+                        <svg class="w-4 h-4"><use href="#logout-icon"/></svg>
+                        <span class="hidden sm:inline">Logout</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="bg-gray-800 text-white sticky top-16 z-30">
+            <div class="max-w-7xl mx-auto px-4">
+                <div class="flex space-x-1 overflow-x-auto">
+                    <button onclick="showTab('dashboard')" class="nav-tab px-4 sm:px-6 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap flex items-center space-x-2" data-tab="dashboard">
+                        <svg class="w-4 h-4"><use href="#dashboard-icon"/></svg>
+                        <span>Dashboard</span>
+                    </button>
+                    <button onclick="showTab('works')" class="nav-tab px-4 sm:px-6 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap flex items-center space-x-2" data-tab="works">
+                        <svg class="w-4 h-4"><use href="#work-icon"/></svg>
+                        <span>All Works</span>
+                    </button>
+                    <button onclick="showTab('add-work')" class="nav-tab px-4 sm:px-6 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap flex items-center space-x-2" data-tab="add-work">
+                        <svg class="w-4 h-4"><use href="#add-icon"/></svg>
+                        <span>Add Work</span>
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Content -->
+        <main class="max-w-7xl mx-auto px-4 py-6 sm:py-8">
+            <!-- Dashboard Tab -->
+            <div id="dashboard" class="tab-content">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
+                    <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-4 sm:p-6 text-white card-shadow">
+                        <h3 class="text-base sm:text-lg font-medium">Total Works</h3>
+                        <p id="totalWorks" class="text-2xl sm:text-3xl font-bold mt-2">0</p>
+                    </div>
+                    <div class="bg-gradient-to-r from-yellow-500 to-orange-500 rounded-xl p-4 sm:p-6 text-white card-shadow">
+                        <h3 class="text-base sm:text-lg font-medium">Pending</h3>
+                        <p id="pendingWorks" class="text-2xl sm:text-3xl font-bold mt-2">0</p>
+                    </div>
+                    <div class="bg-gradient-to-r from-green-500 to-green-600 rounded-xl p-4 sm:p-6 text-white card-shadow">
+                        <h3 class="text-base sm:text-lg font-medium">Completed</h3>
+                        <p id="completedWorks" class="text-2xl sm:text-3xl font-bold mt-2">0</p>
+                    </div>
+                    <div class="bg-gradient-to-r from-red-500 to-red-600 rounded-xl p-4 sm:p-6 text-white card-shadow">
+                        <h3 class="text-base sm:text-lg font-medium">Due Today</h3>
+                        <p id="dueTodayWorks" class="text-2xl sm:text-3xl font-bold mt-2">0</p>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-lg p-4 sm:p-6 card-shadow">
+                    <h2 class="text-lg sm:text-xl font-bold text-gray-900 mb-4">Quick Actions</h2>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <button onclick="showTab('works')" class="bg-blue-500 text-white p-4 rounded-lg hover:bg-blue-600 transition-colors text-left flex items-center space-x-3">
+                            <svg class="w-6 h-6"><use href="#work-icon"/></svg>
+                            <div>
+                                <h3 class="font-medium">View All Works</h3>
+                                <p class="text-sm opacity-90 mt-1">Manage and track work progress</p>
+                            </div>
+                        </button>
+                        <button onclick="showTab('add-work')" class="bg-green-500 text-white p-4 rounded-lg hover:bg-green-600 transition-colors text-left flex items-center space-x-3">
+                            <svg class="w-6 h-6"><use href="#add-icon"/></svg>
+                            <div>
+                                <h3 class="font-medium">Add New Work</h3>
+                                <p class="text-sm opacity-90 mt-1">Create and assign new tasks</p>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Works Tab -->
+            <div id="works" class="tab-content hidden">
+                <!-- Advanced Filters -->
+                <div class="bg-white rounded-xl shadow-lg p-4 sm:p-6 mb-6 card-shadow">
+                    <div class="flex items-center space-x-2 mb-4">
+                        <svg class="w-5 h-5 text-gray-600"><use href="#filter-icon"/></svg>
+                        <h2 class="text-lg sm:text-xl font-bold text-gray-900">Filter Works</h2>
+                    </div>
+                    
+                    <!-- Member Filters -->
+                    <div class="mb-4">
+                        <h3 class="text-sm font-medium text-gray-700 mb-2">Filter by Member:</h3>
+                        <div class="flex flex-wrap gap-2">
+                            <button onclick="filterWorks('all')" class="member-filter-btn bg-gray-800 text-white px-3 py-2 rounded-lg font-medium text-sm flex items-center space-x-2">
+                                <svg class="w-4 h-4"><use href="#user-icon"/></svg>
+                                <span>All Members</span>
+                            </button>
+                            <button onclick="filterWorks('Irshad')" class="member-filter-btn bg-gray-200 text-gray-700 px-3 py-2 rounded-lg font-medium hover:bg-gray-300 text-sm flex items-center space-x-2">
+                                <img src="irshad.jpg" alt="Irshad" class="w-4 h-4 rounded-full">
+                                <span>Irshad</span>
+                            </button>
+                            <button onclick="filterWorks('Niyas')" class="member-filter-btn bg-gray-200 text-gray-700 px-3 py-2 rounded-lg font-medium hover:bg-gray-300 text-sm flex items-center space-x-2">
+                                <img src="niyas.jpg" alt="Niyas" class="w-4 h-4 rounded-full">
+                                <span>Niyas</span>
+                            </button>
+                            <button onclick="filterWorks('Muhammed')" class="member-filter-btn bg-gray-200 text-gray-700 px-3 py-2 rounded-lg font-medium hover:bg-gray-300 text-sm flex items-center space-x-2">
+                                <img src="muhammed.jpg" alt="Muhammed" class="w-4 h-4 rounded-full">
+                                <span>Muhammed</span>
+                            </button>
+                            <button onclick="filterWorks('Najil')" class="member-filter-btn bg-gray-200 text-gray-700 px-3 py-2 rounded-lg font-medium hover:bg-gray-300 text-sm flex items-center space-x-2">
+                                <img src="najil.jpg" alt="Najil" class="w-4 h-4 rounded-full">
+                                <span>Najil</span>
+                            </button>
+                            <button onclick="filterWorks('Safvan')" class="member-filter-btn bg-gray-200 text-gray-700 px-3 py-2 rounded-lg font-medium hover:bg-gray-300 text-sm flex items-center space-x-2">
+                                <img src="safvan.jpg" alt="Safvan" class="w-4 h-4 rounded-full">
+                                <span>Safvan</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Status & Date Filters -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div>
+                            <h3 class="text-sm font-medium text-gray-700 mb-2">Filter by Status:</h3>
+                            <select id="statusFilter" onchange="applyFilters()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                <option value="all">All Status</option>
+                                <option value="pending">Pending</option>
+                                <option value="in-progress">In Progress</option>
+                                <option value="completed">Completed</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <h3 class="text-sm font-medium text-gray-700 mb-2">Filter by Deadline:</h3>
+                            <select id="deadlineFilter" onchange="applyFilters()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                <option value="all">All Deadlines</option>
+                                <option value="today">Due Today</option>
+                                <option value="tomorrow">Due Tomorrow</option>
+                                <option value="this-week">This Week</option>
+                                <option value="overdue">Overdue</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <h3 class="text-sm font-medium text-gray-700 mb-2">Created by:</h3>
+                            <select id="creatorFilter" onchange="applyFilters()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                <option value="all">All Creators</option>
+                                <option value="Irshad">Irshad</option>
+                                <option value="Niyas">Niyas</option>
+                                <option value="Muhammed">Muhammed</option>
+                                <option value="Najil">Najil</option>
+                                <option value="Safvan">Safvan</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <h3 class="text-sm font-medium text-gray-700 mb-2">Sort by:</h3>
+                            <select id="sortFilter" onchange="applyFilters()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                <option value="newest">Newest First</option>
+                                <option value="oldest">Oldest First</option>
+                                <option value="deadline">Deadline</option>
+                                <option value="status">Status</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="worksList" class="space-y-4">
+                    <!-- Works will be populated here -->
+                </div>
+            </div>
+
+            <!-- Add/Edit Work Tab -->
+            <div id="add-work" class="tab-content hidden">
+                <div class="bg-white rounded-xl shadow-lg p-4 sm:p-6 card-shadow">
+                    <h2 id="workFormTitle" class="text-lg sm:text-xl font-bold text-gray-900 mb-6">Add New Work</h2>
+                    
+                    <form onsubmit="submitWork(event)" class="space-y-6">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Work Name *</label>
+                                <input type="text" id="workName" required class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">WhatsApp Number</label>
+                                <input type="tel" id="whatsappNumber" class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="+91 9876543210">
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                            <textarea id="workDescription" rows="4" class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Assign to Staff *</label>
+                                <select id="assignedStaff" required class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                    <option value="">Select Staff Member</option>
+                                    <option value="Irshad">Irshad</option>
+                                    <option value="Niyas">Niyas</option>
+                                    <option value="Muhammed">Muhammed</option>
+                                    <option value="Najil">Najil</option>
+                                    <option value="Safvan">Safvan</option>
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Deadline</label>
+                                <input type="date" id="workDeadline" class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+                                <select id="workPriority" class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                    <option value="medium">Medium</option>
+                                    <option value="low">Low</option>
+                                    <option value="high">High</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="flex flex-col sm:flex-row justify-end space-y-3 sm:space-y-0 sm:space-x-4">
+                            <button type="button" onclick="cancelEdit()" class="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors order-2 sm:order-1">
+                                Cancel
+                            </button>
+                            <button type="submit" id="submitBtn" class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors order-1 sm:order-2 flex items-center space-x-2">
+                                <svg class="w-4 h-4"><use href="#add-icon"/></svg>
+                                <span>Add Work</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Work Details Modal -->
+    <div id="workModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="p-4 sm:p-6 border-b border-gray-200">
+                <div class="flex justify-between items-start">
+                    <div class="flex items-start space-x-3 flex-1">
+                        <img id="modalAssignedAvatar" src="" alt="Assigned" class="avatar-lg">
+                        <div>
+                            <h3 id="modalWorkName" class="text-lg sm:text-xl font-bold text-gray-900 mb-1"></h3>
+                            <div id="modalPriorityBadge" class="inline-block px-2 py-1 rounded text-xs font-medium"></div>
+                        </div>
+                    </div>
+                    <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 text-2xl flex-shrink-0 ml-4">&times;</button>
+                </div>
+            </div>
+            
+            <div class="p-4 sm:p-6">
+                <div class="space-y-4">
+                    <div id="statusUpdateSection">
+                        <label class="block text-sm font-medium text-gray-700">Status</label>
+                        <select id="modalStatus" onchange="updateWorkStatus()" class="mt-1 block w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500">
+                            <option value="pending">Pending</option>
+                            <option value="in-progress">In Progress</option>
+                            <option value="completed">Completed</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Description</label>
+                        <p id="modalDescription" class="mt-1 text-gray-900 bg-gray-50 p-3 rounded-lg text-sm"></p>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Assigned to</label>
+                            <div class="flex items-center space-x-2 mt-1">
+                                <img id="modalAssignedAvatarSmall" src="" alt="Assigned" class="w-6 h-6 rounded-full">
+                                <p id="modalAssigned" class="text-gray-900 font-medium"></p>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Deadline</label>
+                            <div class="flex items-center space-x-2 mt-1">
+                                <svg class="w-4 h-4 text-gray-500"><use href="#calendar-icon"/></svg>
+                                <p id="modalDeadline" class="text-gray-900"></p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Created by</label>
+                            <div class="flex items-center space-x-2 mt-1">
+                                <img id="modalCreatorAvatar" src="" alt="Creator" class="w-6 h-6 rounded-full">
+                                <p id="modalCreatedBy" class="text-gray-900 font-medium"></p>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Created on</label>
+                            <p id="modalCreatedAt" class="mt-1 text-gray-900"></p>
+                        </div>
+                    </div>
+                    
+                    <div id="modalWhatsapp" class="hidden">
+                        <label class="block text-sm font-medium text-gray-700">WhatsApp Number</label>
+                        <div class="mt-1 flex">
+                            <input type="text" id="modalWhatsappNumber" readonly class="flex-1 border border-gray-300 rounded-l-lg px-3 py-2 bg-gray-50 text-sm">
+                            <button onclick="copyWhatsApp()" class="bg-green-500 text-white px-4 py-2 rounded-r-lg hover:bg-green-600 transition-colors text-sm flex items-center space-x-1">
+                                <svg class="w-4 h-4"><use href="#copy-icon"/></svg>
+                                <span>Copy</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="workActions" class="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-200">
+                        <button id="editWorkBtn" onclick="editWork()" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center space-x-2">
+                            <svg class="w-4 h-4"><use href="#edit-icon"/></svg>
+                            <span>Edit Work</span>
+                        </button>
+                        <button id="deleteWorkBtn" onclick="deleteWork()" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors text-sm flex items-center space-x-2">
+                            <svg class="w-4 h-4"><use href="#delete-icon"/></svg>
+                            <span>Delete Work</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
