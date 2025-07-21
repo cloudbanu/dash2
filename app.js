@@ -1,12 +1,7 @@
-
-
-const { createClient } = supabase;
-const supabaseClient = createClient(supabaseUrl, supabaseKey);
-
 // Global variables
 let currentUser = null;
 let currentUserRole = null;
-let works = [];
+let works = JSON.parse(localStorage.getItem('works')) || [];
 let currentWorkId = null;
 let editingWorkId = null;
 let currentFilters = {
@@ -36,34 +31,21 @@ document.addEventListener('DOMContentLoaded', function() {
         navigator.serviceWorker.register('sw.js');
     }
     
-    // Check if a user is already "logged in" from a previous session
-    const storedUser = JSON.parse(sessionStorage.getItem('currentUser'));
-    if (storedUser) {
-        login(storedUser.name, storedUser.role);
-    }
+    updateStats();
+    renderWorks();
 });
 
 // Login function
-async function login(name, role) {
-    try {
-        currentUser = name;
-        currentUserRole = role;
-        
-        // Store user session
-        sessionStorage.setItem('currentUser', JSON.stringify({ name, role }));
-        
-        document.getElementById('loginScreen').classList.add('hidden');
-        document.getElementById('mainApp').classList.remove('hidden');
-        document.getElementById('userName').textContent = name;
-        document.getElementById('userAvatar').src = memberAvatars[name];
-        
-        showTab('dashboard');
-        await fetchAllWorks(); // Fetch data from Supabase on login
-        updateStats();
-    } catch (error) {
-        console.error('Login error:', error);
-        alert('Login failed. Please try again.');
-    }
+function login(name, role) {
+    currentUser = name;
+    currentUserRole = role;
+    
+    document.getElementById('loginScreen').classList.add('hidden');
+    document.getElementById('mainApp').classList.remove('hidden');
+    document.getElementById('userName').textContent = name;
+    document.getElementById('userAvatar').src = memberAvatars[name];
+    
+    showTab('dashboard');
 }
 
 // Logout function
@@ -71,201 +53,107 @@ function logout() {
     currentUser = null;
     currentUserRole = null;
     editingWorkId = null;
-    works = [];
-    
-    sessionStorage.removeItem('currentUser');
     
     document.getElementById('loginScreen').classList.remove('hidden');
     document.getElementById('mainApp').classList.add('hidden');
 }
 
-// --- DATABASE (SUPABASE) FUNCTIONS ---
-
-// Fetch all works from Supabase
-async function fetchAllWorks() {
-    try {
-        const { data, error } = await supabaseClient
-            .from('works')
-            .select('*')
-            .order('created_at', { ascending: false });
-
-        if (error) {
-            console.error('Error fetching works:', error);
-            alert('Could not fetch data from the server. Please check your connection.');
-            return;
-        }
-        
-        works = data || [];
-        renderWorks();
-        updateStats();
-    } catch (error) {
-        console.error('Network error:', error);
-        alert('Network error. Please check your internet connection.');
-    }
-}
-
-// Submit work (Add or Edit)
-async function submitWork(event) {
-    event.preventDefault();
-    
-    try {
-        const workData = {
-            name: document.getElementById('workName').value,
-            description: document.getElementById('workDescription').value,
-            whatsapp_number: document.getElementById('whatsappNumber').value || null,
-            assigned_staff: document.getElementById('assignedStaff').value,
-            deadline: document.getElementById('workDeadline').value || null,
-            priority: document.getElementById('workPriority').value || 'medium'
-        };
-        
-        if (editingWorkId) {
-            // Update existing work
-            workData.updated_by = currentUser;
-            workData.updated_at = new Date().toISOString();
-            
-            const { error } = await supabaseClient
-                .from('works')
-                .update(workData)
-                .eq('id', editingWorkId);
-                
-            if (error) {
-                console.error('Error updating work:', error);
-                alert('Failed to update work: ' + error.message);
-                return;
-            }
-            
-            alert('Work updated successfully!');
-            editingWorkId = null;
-        } else {
-            // Add new work
-            workData.created_by = currentUser;
-            workData.status = 'pending';
-
-            const { error } = await supabaseClient
-                .from('works')
-                .insert([workData]);
-
-            if (error) {
-                console.error('Error adding work:', error);
-                alert('Failed to add work: ' + error.message);
-                return;
-            }
-            
-            alert('Work added successfully!');
-        }
-        
-        resetForm();
-        await fetchAllWorks(); // Re-fetch all data
-        showTab('works');
-    } catch (error) {
-        console.error('Submit work error:', error);
-        alert('An error occurred. Please try again.');
-    }
-}
-
-// Delete work
-async function deleteWork() {
-    if (!currentWorkId) return;
-    
-    try {
-        const work = works.find(w => w.id === currentWorkId);
-        if (!work) return;
-        
-        // Permission check
-        if (currentUserRole !== 'admin' && work.created_by !== currentUser) {
-            alert('You do not have permission to delete this work.');
-            return;
-        }
-        
-        if (confirm('Are you sure you want to delete this work? This action cannot be undone.')) {
-            const { error } = await supabaseClient
-                .from('works')
-                .delete()
-                .eq('id', currentWorkId);
-                
-            if (error) {
-                console.error('Error deleting work:', error);
-                alert('Failed to delete work: ' + error.message);
-                return;
-            }
-            
-            closeModal();
-            await fetchAllWorks();
-            alert('Work deleted successfully!');
-        }
-    } catch (error) {
-        console.error('Delete work error:', error);
-        alert('An error occurred while deleting. Please try again.');
-    }
-}
-
-// Update work status
-async function updateWorkStatus() {
-    if (!currentWorkId) return;
-    
-    try {
-        const work = works.find(w => w.id === currentWorkId);
-        if (!work) return;
-        
-        // Permission check
-        if (currentUserRole !== 'admin' && work.assigned_staff !== currentUser) {
-            alert('You can only update the status of works assigned to you.');
-            document.getElementById('modalStatus').value = work.status; // Revert UI
-            return;
-        }
-        
-        const newStatus = document.getElementById('modalStatus').value;
-        
-        const { error } = await supabaseClient
-            .from('works')
-            .update({ 
-                status: newStatus, 
-                updated_by: currentUser,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', currentWorkId);
-            
-        if (error) {
-            console.error('Error updating status:', error);
-            alert('Failed to update status: ' + error.message);
-            return;
-        }
-        
-        await fetchAllWorks();
-        const statusText = newStatus.replace('-', ' ').toUpperCase();
-        alert(`Work status updated to ${statusText}`);
-    } catch (error) {
-        console.error('Update status error:', error);
-        alert('An error occurred while updating status. Please try again.');
-    }
-}
-
-// --- UI AND HELPER FUNCTIONS ---
-
 // Update date and time
 function updateDateTime() {
     const now = new Date();
-    const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true };
-    const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    const timeOptions = { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit',
+        hour12: true 
+    };
+    const dateOptions = { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+    };
+    
     document.getElementById('currentTime').textContent = now.toLocaleTimeString('en-US', timeOptions);
     document.getElementById('currentDate').textContent = now.toLocaleDateString('en-US', dateOptions);
 }
 
 // Tab navigation
 function showTab(tabName) {
-    document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.add('hidden');
+    });
+    
+    // Remove active class from all nav tabs
     document.querySelectorAll('.nav-tab').forEach(tab => {
         tab.classList.remove('bg-blue-600');
         tab.classList.add('hover:bg-gray-700');
     });
+    
+    // Show selected tab
     document.getElementById(tabName).classList.remove('hidden');
+    
+    // Add active class to selected nav tab
     const activeTab = document.querySelector(`[data-tab="${tabName}"]`);
     if (activeTab) {
         activeTab.classList.add('bg-blue-600');
         activeTab.classList.remove('hover:bg-gray-700');
     }
-    if (tabName === 'works') renderWorks();
-    else if (tabName === 'add-work' && !editingWorkId) resetForm();
+    
+    // Update content if needed
+    if (tabName === 'works') {
+        renderWorks();
+    } else if (tabName === 'add-work' && !editingWorkId) {
+        resetForm();
+    }
+}
+
+// Submit work (Add or Edit)
+function submitWork(event) {
+    event.preventDefault();
+    
+    const workData = {
+        name: document.getElementById('workName').value,
+        description: document.getElementById('workDescription').value,
+        whatsappNumber: document.getElementById('whatsappNumber').value,
+        assignedStaff: document.getElementById('assignedStaff').value,
+        deadline: document.getElementById('workDeadline').value,
+        priority: document.getElementById('workPriority').value || 'medium'
+    };
+    
+    if (editingWorkId) {
+        // Update existing work
+        const workIndex = works.findIndex(w => w.id === editingWorkId);
+        if (workIndex !== -1) {
+            works[workIndex] = {
+                ...works[workIndex],
+                ...workData,
+                updatedBy: currentUser,
+                updatedAt: new Date().toISOString()
+            };
+            
+            alert('Work updated successfully!');
+        }
+        editingWorkId = null;
+    } else {
+        // Add new work
+        const newWork = {
+            id: Date.now(),
+            ...workData,
+            status: 'pending',
+            createdBy: currentUser,
+            createdAt: new Date().toISOString()
+        };
+        
+        works.push(newWork);
+        alert('Work added successfully!');
+    }
+    
+    localStorage.setItem('works', JSON.stringify(works));
+    resetForm();
+    updateStats();
+    showTab('works');
 }
 
 // Reset form
@@ -276,9 +164,14 @@ function resetForm() {
     document.getElementById('assignedStaff').value = '';
     document.getElementById('workDeadline').value = '';
     document.getElementById('workPriority').value = 'medium';
+    
+    // Reset form to add mode
     editingWorkId = null;
     document.getElementById('workFormTitle').textContent = 'Add New Work';
-    document.getElementById('submitBtn').innerHTML = `<svg class="w-4 h-4"><use href="#add-icon"/></svg><span>Add Work</span>`;
+    document.getElementById('submitBtn').innerHTML = `
+        <svg class="w-4 h-4"><use href="#add-icon"/></svg>
+        <span>Add Work</span>
+    `;
 }
 
 // Cancel edit
@@ -287,43 +180,66 @@ function cancelEdit() {
     showTab('works');
 }
 
-// Filter works by member
+// Filter works by member (legacy function for compatibility)
 function filterWorks(member) {
     currentFilters.member = member;
+    
+    // Update member filter button styles
     document.querySelectorAll('.member-filter-btn').forEach(btn => {
         btn.classList.remove('bg-gray-800', 'text-white');
         btn.classList.add('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
     });
-    event.target.closest('button').classList.remove('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
-    event.target.closest('button').classList.add('bg-gray-800', 'text-white');
+    
+    event.target.classList.remove('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+    event.target.classList.add('bg-gray-800', 'text-white');
+    
     applyFilters();
 }
 
 // Apply all filters
 function applyFilters() {
+    // Get current filter values
     currentFilters.status = document.getElementById('statusFilter').value;
     currentFilters.deadline = document.getElementById('deadlineFilter').value;
     currentFilters.creator = document.getElementById('creatorFilter').value;
     currentFilters.sort = document.getElementById('sortFilter').value;
+    
     renderWorks();
 }
 
 // Get filtered and sorted works
 function getFilteredWorks() {
     let filteredWorks = [...works];
-    if (currentFilters.member !== 'all') filteredWorks = filteredWorks.filter(work => work.assigned_staff === currentFilters.member);
-    if (currentFilters.status !== 'all') filteredWorks = filteredWorks.filter(work => work.status === currentFilters.status);
-    if (currentFilters.creator !== 'all') filteredWorks = filteredWorks.filter(work => work.created_by === currentFilters.creator);
     
+    // Filter by member
+    if (currentFilters.member !== 'all') {
+        filteredWorks = filteredWorks.filter(work => work.assignedStaff === currentFilters.member);
+    }
+    
+    // Filter by status
+    if (currentFilters.status !== 'all') {
+        filteredWorks = filteredWorks.filter(work => work.status === currentFilters.status);
+    }
+    
+    // Filter by creator
+    if (currentFilters.creator !== 'all') {
+        filteredWorks = filteredWorks.filter(work => work.createdBy === currentFilters.creator);
+    }
+    
+    // Filter by deadline
     if (currentFilters.deadline !== 'all') {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
+        
         filteredWorks = filteredWorks.filter(work => {
-            if (!work.deadline) return false;
+            if (!work.deadline) return currentFilters.deadline === 'all';
+            
             const deadline = new Date(work.deadline);
             deadline.setHours(0, 0, 0, 0);
+            
             switch (currentFilters.deadline) {
-                case 'today': return deadline.getTime() === today.getTime();
+                case 'today':
+                    return deadline.getTime() === today.getTime();
                 case 'tomorrow':
                     const tomorrow = new Date(today);
                     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -332,26 +248,75 @@ function getFilteredWorks() {
                     const weekEnd = new Date(today);
                     weekEnd.setDate(weekEnd.getDate() + 7);
                     return deadline >= today && deadline <= weekEnd;
-                case 'overdue': return deadline < today && work.status !== 'completed';
-                default: return true;
+                case 'overdue':
+                    return deadline < today && work.status !== 'completed';
+                default:
+                    return true;
             }
         });
     }
-
+    
+    // Sort works
     filteredWorks.sort((a, b) => {
         switch (currentFilters.sort) {
-            case 'newest': return new Date(b.created_at) - new Date(a.created_at);
-            case 'oldest': return new Date(a.created_at) - new Date(b.created_at);
+            case 'newest':
+                return new Date(b.createdAt) - new Date(a.createdAt);
+            case 'oldest':
+                return new Date(a.createdAt) - new Date(b.createdAt);
             case 'deadline':
-                if (!a.deadline) return 1; if (!b.deadline) return -1;
+                if (!a.deadline && !b.deadline) return 0;
+                if (!a.deadline) return 1;
+                if (!b.deadline) return -1;
                 return new Date(a.deadline) - new Date(b.deadline);
             case 'status':
                 const statusOrder = { 'pending': 0, 'in-progress': 1, 'completed': 2 };
                 return statusOrder[a.status] - statusOrder[b.status];
-            default: return 0;
+            default:
+                return 0;
         }
     });
+    
     return filteredWorks;
+}
+
+// Get work priority class
+function getPriorityClass(priority) {
+    switch (priority) {
+        case 'high': return 'priority-high';
+        case 'medium': return 'priority-medium';
+        case 'low': return 'priority-low';
+        default: return 'priority-medium';
+    }
+}
+
+// Get priority badge
+function getPriorityBadge(priority) {
+    const priorityConfig = {
+        'high': { class: 'bg-red-100 text-red-800', text: 'High Priority' },
+        'medium': { class: 'bg-yellow-100 text-yellow-800', text: 'Medium Priority' },
+        'low': { class: 'bg-green-100 text-green-800', text: 'Low Priority' }
+    };
+    
+    const config = priorityConfig[priority] || priorityConfig['medium'];
+    return `<span class="px-2 py-1 rounded-full text-xs font-medium ${config.class}">${config.text}</span>`;
+}
+
+// Check if deadline is today or overdue
+function getDeadlineStatus(deadline) {
+    if (!deadline) return null;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const deadlineDate = new Date(deadline);
+    deadlineDate.setHours(0, 0, 0, 0);
+    
+    if (deadlineDate.getTime() === today.getTime()) {
+        return { type: 'today', text: 'Due Today', class: 'bg-orange-100 text-orange-800' };
+    } else if (deadlineDate < today) {
+        return { type: 'overdue', text: 'Overdue', class: 'bg-red-100 text-red-800' };
+    }
+    
+    return null;
 }
 
 // Render works list
@@ -371,8 +336,8 @@ function renderWorks() {
     }
     
     worksList.innerHTML = filteredWorks.map(work => {
-        const createdDate = new Date(work.created_at).toLocaleDateString();
-        const canEdit = currentUserRole === 'admin' || work.created_by === currentUser;
+        const createdDate = new Date(work.createdAt).toLocaleDateString();
+        const canEdit = currentUserRole === 'admin' || work.createdBy === currentUser;
         const deadlineStatus = getDeadlineStatus(work.deadline);
         const priorityClass = getPriorityClass(work.priority);
         
@@ -381,31 +346,60 @@ function renderWorks() {
                 <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-4 gap-3">
                     <div class="flex-1">
                         <div class="flex items-center space-x-3 mb-3">
-                            <img src="${memberAvatars[work.assigned_staff]}" alt="${work.assigned_staff}" class="avatar">
+                            <img src="${memberAvatars[work.assignedStaff]}" alt="${work.assignedStaff}" class="avatar">
                             <div>
                                 <h3 class="text-lg font-bold text-gray-900">${work.name}</h3>
-                                <p class="text-sm text-gray-600">Assigned to ${work.assigned_staff}</p>
+                                <p class="text-sm text-gray-600">Assigned to ${work.assignedStaff}</p>
                             </div>
                         </div>
+                        
                         <div class="flex flex-wrap items-center gap-2 mb-2">
-                            <span class="status-badge status-${work.status} px-3 py-1 rounded-full text-xs font-medium">${work.status.replace('-', ' ').toUpperCase()}</span>
+                            <span class="status-badge status-${work.status} px-3 py-1 rounded-full text-xs font-medium">
+                                ${work.status.replace('-', ' ').toUpperCase()}
+                            </span>
                             ${getPriorityBadge(work.priority)}
                             ${deadlineStatus ? `<span class="px-2 py-1 rounded-full text-xs font-medium ${deadlineStatus.class}">${deadlineStatus.text}</span>` : ''}
                         </div>
                     </div>
+                    
                     <div class="flex space-x-2">
-                        ${canEdit ? `<button onclick="startEditWork(${work.id})" class="bg-blue-500 text-white px-3 py-2 rounded-lg text-xs hover:bg-blue-600 flex items-center space-x-1"><svg class="w-3 h-3"><use href="#edit-icon"/></svg><span>Edit</span></button>` : ''}
-                        <button onclick="openWorkModal(${work.id})" class="bg-gray-500 text-white px-3 py-2 rounded-lg text-xs hover:bg-gray-600 flex items-center space-x-1"><svg class="w-3 h-3"><use href="#view-icon"/></svg><span>View</span></button>
+                        ${canEdit ? `
+                            <button onclick="startEditWork(${work.id})" class="bg-blue-500 text-white px-3 py-2 rounded-lg text-xs hover:bg-blue-600 transition-colors flex items-center space-x-1">
+                                <svg class="w-3 h-3"><use href="#edit-icon"/></svg>
+                                <span>Edit</span>
+                            </button>
+                        ` : ''}
+                        <button onclick="openWorkModal(${work.id})" class="bg-gray-500 text-white px-3 py-2 rounded-lg text-xs hover:bg-gray-600 transition-colors flex items-center space-x-1">
+                            <svg class="w-3 h-3"><use href="#view-icon"/></svg>
+                            <span>View</span>
+                        </button>
                     </div>
                 </div>
-                <p class="text-gray-600 mb-4 text-sm line-clamp-2">${work.description || 'No description'}</p>
+                
+                <p class="text-gray-600 mb-4 text-sm line-clamp-2">${work.description || 'No description provided'}</p>
+                
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm mb-4">
-                    <div class="flex items-center space-x-2"><svg class="w-4 h-4 text-gray-500"><use href="#calendar-icon"/></svg><span>Deadline:</span><span class="font-medium">${work.deadline ? new Date(work.deadline).toLocaleDateString() : 'N/A'}</span></div>
-                    <div class="flex items-center space-x-2"><img src="${memberAvatars[work.created_by]}" alt="${work.created_by}" class="w-4 h-4 rounded-full"><span>Created by:</span><span class="font-medium text-blue-600">${work.created_by}</span></div>
+                    <div class="flex items-center space-x-2">
+                        <svg class="w-4 h-4 text-gray-500"><use href="#calendar-icon"/></svg>
+                        <span class="text-gray-500">Deadline:</span>
+                        <span class="font-medium text-gray-900">${work.deadline ? new Date(work.deadline).toLocaleDateString() : 'No deadline'}</span>
+                    </div>
+                    
+                    <div class="flex items-center space-x-2">
+                        <img src="${memberAvatars[work.createdBy]}" alt="${work.createdBy}" class="w-4 h-4 rounded-full">
+                        <span class="text-gray-500">Created by:</span>
+                        <span class="font-medium text-blue-600">${work.createdBy}</span>
+                    </div>
                 </div>
+                
                 <div class="flex justify-between items-center text-xs text-gray-500 pt-3 border-t border-gray-100">
                     <span>Created on ${createdDate}</span>
-                    ${work.whatsapp_number ? `<button onclick="event.stopPropagation(); copyWhatsAppNumber('${work.whatsapp_number}')" class="bg-green-500 text-white px-3 py-1 rounded text-xs hover:bg-green-600 flex items-center space-x-1"><svg class="w-3 h-3"><use href="#phone-icon"/></svg><span>Copy WhatsApp</span></button>` : ''}
+                    ${work.whatsappNumber ? `
+                        <button onclick="event.stopPropagation(); copyWhatsAppNumber('${work.whatsappNumber}')" class="bg-green-500 text-white px-3 py-1 rounded text-xs hover:bg-green-600 transition-colors flex items-center space-x-1">
+                            <svg class="w-3 h-3"><use href="#phone-icon"/></svg>
+                            <span>Copy WhatsApp</span>
+                        </button>
+                    ` : ''}
                 </div>
             </div>
         `;
@@ -416,19 +410,30 @@ function renderWorks() {
 function startEditWork(workId) {
     const work = works.find(w => w.id === workId);
     if (!work) return;
-    if (currentUserRole !== 'admin' && work.created_by !== currentUser) {
+    
+    // Check permission
+    if (currentUserRole !== 'admin' && work.createdBy !== currentUser) {
         alert('You can only edit works that you created.');
         return;
     }
+    
     editingWorkId = workId;
+    
+    // Fill form with work data
     document.getElementById('workName').value = work.name;
     document.getElementById('workDescription').value = work.description || '';
-    document.getElementById('whatsappNumber').value = work.whatsapp_number || '';
-    document.getElementById('assignedStaff').value = work.assigned_staff;
+    document.getElementById('whatsappNumber').value = work.whatsappNumber || '';
+    document.getElementById('assignedStaff').value = work.assignedStaff;
     document.getElementById('workDeadline').value = work.deadline || '';
     document.getElementById('workPriority').value = work.priority || 'medium';
+    
+    // Update form UI
     document.getElementById('workFormTitle').textContent = 'Edit Work';
-    document.getElementById('submitBtn').innerHTML = `<svg class="w-4 h-4"><use href="#edit-icon"/></svg><span>Update Work</span>`;
+    document.getElementById('submitBtn').innerHTML = `
+        <svg class="w-4 h-4"><use href="#edit-icon"/></svg>
+        <span>Update Work</span>
+    `;
+    
     showTab('add-work');
 }
 
@@ -436,43 +441,70 @@ function startEditWork(workId) {
 function openWorkModal(workId) {
     const work = works.find(w => w.id === workId);
     if (!work) return;
+    
     currentWorkId = workId;
+    
+    // Set modal content
     document.getElementById('modalWorkName').textContent = work.name;
-    document.getElementById('modalDescription').textContent = work.description || 'No description';
-    document.getElementById('modalAssigned').textContent = work.assigned_staff;
-    document.getElementById('modalAssignedAvatar').src = memberAvatars[work.assigned_staff];
-    document.getElementById('modalAssignedAvatarSmall').src = memberAvatars[work.assigned_staff];
-    document.getElementById('modalDeadline').textContent = work.deadline ? new Date(work.deadline).toLocaleDateString() : 'N/A';
-    document.getElementById('modalCreatedBy').textContent = work.created_by;
-    document.getElementById('modalCreatorAvatar').src = memberAvatars[work.created_by];
-    document.getElementById('modalCreatedAt').textContent = new Date(work.created_at).toLocaleDateString();
+    document.getElementById('modalDescription').textContent = work.description || 'No description provided';
+    document.getElementById('modalAssigned').textContent = work.assignedStaff;
+    document.getElementById('modalAssignedAvatar').src = memberAvatars[work.assignedStaff];
+    document.getElementById('modalAssignedAvatarSmall').src = memberAvatars[work.assignedStaff];
+    document.getElementById('modalDeadline').textContent = work.deadline ? new Date(work.deadline).toLocaleDateString() : 'No deadline';
+    document.getElementById('modalCreatedBy').textContent = work.createdBy;
+    document.getElementById('modalCreatorAvatar').src = memberAvatars[work.createdBy];
+    document.getElementById('modalCreatedAt').textContent = new Date(work.createdAt).toLocaleDateString();
     document.getElementById('modalStatus').value = work.status;
-    document.getElementById('modalPriorityBadge').innerHTML = getPriorityBadge(work.priority);
-
-    if (work.whatsapp_number) {
+    
+    // Set priority badge
+    const priorityBadge = document.getElementById('modalPriorityBadge');
+    priorityBadge.innerHTML = getPriorityBadge(work.priority);
+    
+    // Handle WhatsApp number
+    if (work.whatsappNumber) {
         document.getElementById('modalWhatsapp').classList.remove('hidden');
-        document.getElementById('modalWhatsappNumber').value = work.whatsapp_number;
+        document.getElementById('modalWhatsappNumber').value = work.whatsappNumber;
     } else {
         document.getElementById('modalWhatsapp').classList.add('hidden');
     }
-
+    
+    // Show/hide status update based on permissions
     const statusSection = document.getElementById('statusUpdateSection');
     const statusSelect = document.getElementById('modalStatus');
     const editBtn = document.getElementById('editWorkBtn');
     const deleteBtn = document.getElementById('deleteWorkBtn');
     
-    if (currentUserRole === 'admin' || work.assigned_staff === currentUser) {
+    if (currentUserRole === 'admin' || work.assignedStaff === currentUser) {
         statusSelect.disabled = false;
         statusSection.classList.remove('hidden');
     } else {
         statusSelect.disabled = true;
         statusSection.classList.add('hidden');
     }
-
-    const canModify = currentUserRole === 'admin' || work.created_by === currentUser;
-    editBtn.classList.toggle('hidden', !canModify);
-    deleteBtn.classList.toggle('hidden', !canModify);
-    document.getElementById('workActions').classList.toggle('hidden', !canModify);
+    
+    // Show/hide edit and delete buttons based on permissions
+    const canEdit = currentUserRole === 'admin' || work.createdBy === currentUser;
+    const canDelete = currentUserRole === 'admin' || work.createdBy === currentUser;
+    
+    if (canEdit) {
+        editBtn.classList.remove('hidden');
+    } else {
+        editBtn.classList.add('hidden');
+    }
+    
+    if (canDelete) {
+        deleteBtn.classList.remove('hidden');
+    } else {
+        deleteBtn.classList.add('hidden');
+    }
+    
+    // Hide actions section if no actions available
+    const workActions = document.getElementById('workActions');
+    if (!canEdit && !canDelete) {
+        workActions.classList.add('hidden');
+    } else {
+        workActions.classList.remove('hidden');
+    }
     
     document.getElementById('workModal').classList.remove('hidden');
 }
@@ -485,10 +517,65 @@ function editWork() {
     }
 }
 
+// Delete work
+function deleteWork() {
+    if (!currentWorkId) return;
+    
+    const work = works.find(w => w.id === currentWorkId);
+    if (!work) return;
+    
+    // Check permission
+    if (currentUserRole !== 'admin' && work.createdBy !== currentUser) {
+        alert('You can only delete works that you created.');
+        return;
+    }
+    
+    if (confirm('Are you sure you want to delete this work? This action cannot be undone.')) {
+        works = works.filter(w => w.id !== currentWorkId);
+        localStorage.setItem('works', JSON.stringify(works));
+        
+        closeModal();
+        updateStats();
+        renderWorks();
+        
+        alert('Work deleted successfully!');
+    }
+}
+
 // Close modal
 function closeModal() {
     document.getElementById('workModal').classList.add('hidden');
     currentWorkId = null;
+}
+
+// Update work status
+function updateWorkStatus() {
+    if (!currentWorkId) return;
+    
+    const work = works.find(w => w.id === currentWorkId);
+    if (!work) return;
+    
+    // Check permission
+    if (currentUserRole !== 'admin' && work.assignedStaff !== currentUser) {
+        alert('You can only update status of works assigned to you.');
+        return;
+    }
+    
+    const newStatus = document.getElementById('modalStatus').value;
+    const workIndex = works.findIndex(w => w.id === currentWorkId);
+    
+    if (workIndex !== -1) {
+        works[workIndex].status = newStatus;
+        works[workIndex].statusUpdatedBy = currentUser;
+        works[workIndex].statusUpdatedAt = new Date().toISOString();
+        localStorage.setItem('works', JSON.stringify(works));
+        updateStats();
+        renderWorks();
+        
+        // Show success message
+        const statusText = newStatus.replace('-', ' ').toUpperCase();
+        alert(`Work status updated to ${statusText}`);
+    }
 }
 
 // Copy WhatsApp number
@@ -499,12 +586,17 @@ function copyWhatsApp() {
 
 function copyWhatsAppNumber(number) {
     navigator.clipboard.writeText(number).then(() => {
+        // Create temporary success message
         const button = event.target.closest('button');
         const originalHTML = button.innerHTML;
-        button.innerHTML = `<svg class="w-3 h-3"><use href="#copy-icon"/></svg><span>Copied!</span>`;
+        button.innerHTML = `
+            <svg class="w-3 h-3"><use href="#copy-icon"/></svg>
+            <span>Copied!</span>
+        `;
         button.classList.add('bg-green-600');
-        setTimeout(() => { 
-            button.innerHTML = originalHTML; 
+        
+        setTimeout(() => {
+            button.innerHTML = originalHTML;
             button.classList.remove('bg-green-600');
         }, 2000);
     }).catch(() => {
@@ -515,6 +607,7 @@ function copyWhatsAppNumber(number) {
         textArea.select();
         document.execCommand('copy');
         document.body.removeChild(textArea);
+        
         alert('WhatsApp number copied to clipboard!');
     });
 }
@@ -539,44 +632,6 @@ function updateStats() {
     document.getElementById('pendingWorks').textContent = pending;
     document.getElementById('completedWorks').textContent = completed;
     document.getElementById('dueTodayWorks').textContent = dueToday;
-}
-
-// --- UTILITY FUNCTIONS ---
-function getPriorityClass(priority) {
-    switch (priority) {
-        case 'high': return 'priority-high';
-        case 'medium': return 'priority-medium';
-        case 'low': return 'priority-low';
-        default: return 'priority-medium';
-    }
-}
-
-function getPriorityBadge(priority) {
-    const priorityConfig = {
-        'high': { class: 'bg-red-100 text-red-800', text: 'High Priority' },
-        'medium': { class: 'bg-yellow-100 text-yellow-800', text: 'Medium Priority' },
-        'low': { class: 'bg-green-100 text-green-800', text: 'Low Priority' }
-    };
-    
-    const config = priorityConfig[priority] || priorityConfig['medium'];
-    return `<span class="px-2 py-1 rounded-full text-xs font-medium ${config.class}">${config.text}</span>`;
-}
-
-function getDeadlineStatus(deadline) {
-    if (!deadline) return null;
-    
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const deadlineDate = new Date(deadline);
-    deadlineDate.setHours(0, 0, 0, 0);
-    
-    if (deadlineDate.getTime() === today.getTime()) {
-        return { type: 'today', text: 'Due Today', class: 'bg-orange-100 text-orange-800' };
-    } else if (deadlineDate < today) {
-        return { type: 'overdue', text: 'Overdue', class: 'bg-red-100 text-red-800' };
-    }
-    
-    return null;
 }
 
 // Add enhanced CSS
