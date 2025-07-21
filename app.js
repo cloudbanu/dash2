@@ -1,9 +1,4 @@
-// --- SUPABASE CLIENT SETUP ---
-// Replace with your actual Supabase URL and Anon Key
-const supabase = createClient(
-  'https://bwrmtfnexukhalzarqsr.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ3cm10Zm5leHVraGFsemFycXNyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwOTcwODYsImV4cCI6MjA2ODY3MzA4Nn0.DDw3n8aol0Z8E09Z-vu8C8r4UAmrZn8n-nZi06tlOY4'
-);
+
 
 const { createClient } = supabase;
 const supabaseClient = createClient(supabaseUrl, supabaseKey);
