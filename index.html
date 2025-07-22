@@ -8,94 +8,212 @@
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="logo.png">
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#6366f1',
-                        secondary: '#8b5cf6',
-                        accent: '#06b6d4',
-                    },
-                    animation: {
-                        'fade-in': 'fadeIn 0.5s ease-in-out',
-                        'slide-in': 'slideIn 0.3s ease-out',
-                        'bounce-in': 'bounceIn 0.6s ease-out',
-                        'slide-down': 'slideDown 0.2s ease-out',
-                        'scale-in': 'scaleIn 0.2s ease-out',
-                    }
-                }
-            }
+    
+    <!-- Tailwind CSS v4 Configuration -->
+    <style type="text/tailwindcss">
+        @theme {
+            --color-primary: #6366f1;
+            --color-secondary: #8b5cf6;
+            --color-accent: #06b6d4;
+            --animate-fade-in: fadeIn 0.5s ease-in-out;
+            --animate-slide-in: slideIn 0.3s ease-out;
+            --animate-bounce-in: bounceIn 0.6s ease-out;
+            --animate-slide-down: slideDown 0.2s ease-out;
+            --animate-scale-in: scaleIn 0.2s ease-out;
         }
-     </script>
-    <style>
+        
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        
         @keyframes slideIn {
             from { transform: translateX(-100%); }
             to { transform: translateX(0); }
         }
+        
         @keyframes bounceIn {
             0% { transform: scale(0.3); opacity: 0; }
             50% { transform: scale(1.05); }
             70% { transform: scale(0.9); }
             100% { transform: scale(1); opacity: 1; }
         }
+        
         @keyframes slideDown {
             from { opacity: 0; transform: translateY(-10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        
         @keyframes scaleIn {
             from { opacity: 0; transform: scale(0.95); }
             to { opacity: 1; transform: scale(1); }
         }
+        
         .glass-effect {
             background: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.2);
         }
+        
         .gradient-bg {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
+        
         .card-hover:hover {
             transform: translateY(-2px);
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
         }
+        
         .custom-dropdown {
             position: relative;
         }
+        
         .dropdown-button {
-            @apply w-full p-4 bg-white border border-gray-300 rounded-lg text-left flex items-center justify-between hover:border-primary focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200;
+            width: 100%;
+            padding: 1rem;
+            background: white;
+            border: 1px solid #d1d5db;
+            border-radius: 0.75rem;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.2s;
         }
+        
+        .dropdown-button:hover {
+            border-color: var(--color-primary);
+        }
+        
+        .dropdown-button:focus {
+            border-color: var(--color-primary);
+            outline: 2px solid rgba(99, 102, 241, 0.2);
+        }
+        
         .dropdown-menu {
-            @apply absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            margin-top: 0.25rem;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.75rem;
             box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            z-index: 50;
+            max-height: 15rem;
+            overflow-y: auto;
         }
+        
         .dropdown-item {
-            @apply px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors duration-150 text-gray-700 border-b border-gray-100 last:border-b-0;
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            transition: background-color 0.15s;
+            color: #374151;
+            border-bottom: 1px solid #f3f4f6;
         }
+        
+        .dropdown-item:last-child {
+            border-bottom: none;
+        }
+        
         .dropdown-item:hover {
-            @apply bg-gray-50;
+            background-color: #f9fafb;
         }
+        
         .dropdown-item.selected {
-            @apply bg-cyan-400 text-white;
+            background-color: #06b6d4;
+            color: white;
         }
+        
         .dropdown-item.clear-option {
-            @apply text-red-600 hover:bg-red-50 font-medium border-t-2 border-gray-200;
+            color: #dc2626;
+            font-weight: 500;
+            border-top: 2px solid #e5e7eb;
         }
+        
+        .dropdown-item.clear-option:hover {
+            background-color: #fef2f2;
+        }
+        
         .member-tile {
-            @apply bg-white rounded-xl p-4 border-2 border-gray-200 hover:border-primary transition-all duration-200 cursor-pointer flex items-center gap-3;
+            background: white;
+            border-radius: 0.75rem;
+            padding: 1rem;
+            border: 2px solid #e5e7eb;
+            transition: all 0.2s;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
         }
+        
+        .member-tile:hover {
+            border-color: var(--color-primary);
+        }
+        
         .member-tile.active {
-            @apply border-primary bg-primary/5;
+            border-color: var(--color-primary);
+            background: rgba(99, 102, 241, 0.05);
         }
+        
         .status-dropdown {
-            @apply relative inline-block;
+            position: relative;
+            display: inline-block;
         }
+        
         .status-button {
-            @apply px-3 py-1 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            cursor: pointer;
+            border: 0;
+            transition: opacity 0.2s;
+        }
+        
+        .status-button:hover {
+            opacity: 0.8;
+        }
+        
+        /* Animation classes */
+        .animate-fade-in {
+            animation: var(--animate-fade-in);
+        }
+        
+        .animate-slide-in {
+            animation: var(--animate-slide-in);
+        }
+        
+        .animate-bounce-in {
+            animation: var(--animate-bounce-in);
+        }
+        
+        .animate-slide-down {
+            animation: var(--animate-slide-down);
+        }
+        
+        .animate-scale-in {
+            animation: var(--animate-scale-in);
+        }
+        
+        /* Hide scrollbar for dropdown menus */
+        .dropdown-menu {
+            scrollbar-width: thin;
+            scrollbar-color: #d1d5db transparent;
+        }
+        
+        .dropdown-menu::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .dropdown-menu::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        .dropdown-menu::-webkit-scrollbar-thumb {
+            background-color: #d1d5db;
+            border-radius: 3px;
         }
     </style>
 </head>
@@ -187,7 +305,7 @@
                         <button onclick="showTab('works')" id="worksTab" 
                                 class="nav-tab px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 text-gray-600 hover:text-gray-800 hover:bg-gray-100">
                             <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 0 012 2"></path>
                             </svg>
                             All Works
                         </button>
@@ -302,7 +420,7 @@
                     <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
                         <h3 class="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h3>
                         <div class="space-y-3">
-                            <button onclick="showTab('works')" class="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-primary to-secondary text-white hover:from-primary/90 hover:to-secondary/90 transition-all duration-300 card-hover">
+                            <button onclick="showTab('works')" class="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-primary to-secondary text-white hover:opacity-90 transition-all duration-300 card-hover">
                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
                                 </svg>
@@ -312,7 +430,7 @@
                                 </div>
                             </button>
 
-                            <button onclick="showTab('add')" class="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-accent to-green-500 text-white hover:from-accent/90 hover:to-green-500/90 transition-all duration-300 card-hover">
+                            <button onclick="showTab('add')" class="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-accent to-green-500 text-white hover:opacity-90 transition-all duration-300 card-hover">
                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                                 </svg>
@@ -567,7 +685,7 @@
                         
                         <div class="flex gap-4">
                             <button type="button" onclick="resetForm()" class="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200">Cancel</button>
-                            <button type="submit" class="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:from-primary/90 hover:to-secondary/90 transition-all duration-300">Add Work</button>
+                            <button type="submit" class="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:opacity-90 transition-all duration-300">Add Work</button>
                         </div>
                     </form>
                 </div>
@@ -577,7 +695,7 @@
 
     <!-- Work Details Modal -->
     <div id="workDetailsModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl p-8 w-full max-w-2xl max-h-90vh overflow-y-auto animate-scale-in">
+        <div class="bg-white rounded-2xl p-8 w-full max-w-2xl max-h-screen overflow-y-auto animate-scale-in">
             <div class="flex justify-between items-center mb-6">
                 <h2 class="text-2xl font-bold text-gray-800">Work Details</h2>
                 <button onclick="closeWorkDetailsModal()" class="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-full transition-colors">
@@ -595,7 +713,7 @@
 
     <!-- Edit Work Modal -->
     <div id="editWorkModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl p-8 w-full max-w-2xl max-h-90vh overflow-y-auto animate-scale-in">
+        <div class="bg-white rounded-2xl p-8 w-full max-w-2xl max-h-screen overflow-y-auto animate-scale-in">
             <div class="flex justify-between items-center mb-6">
                 <h2 class="text-2xl font-bold text-gray-800">Edit Work</h2>
                 <button onclick="closeEditModal()" class="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-full transition-colors">
@@ -657,7 +775,7 @@
                 
                 <div class="flex gap-4">
                     <button type="button" onclick="closeEditModal()" class="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200">Cancel</button>
-                    <button type="submit" class="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:from-primary/90 hover:to-secondary/90 transition-all duration-300">Update Work</button>
+                    <button type="submit" class="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:opacity-90 transition-all duration-300">Update Work</button>
                 </div>
             </form>
         </div>
