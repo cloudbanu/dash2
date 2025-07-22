@@ -4,11 +4,11 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 // Member avatars mapping
 const memberAvatars = {
-  'Irshad': 'irshad.jpg',
-  'Niyas': 'niyas.jpg',
-  'Muhammed': 'muhammed.jpg',
-  'Najil': 'najil.jpg',
-  'Safvan': 'safvan.jpg'
+    'Irshad': 'irshad.jpg',
+    'Niyas': 'niyas.jpg',
+    'Muhammed': 'muhammed.jpg',
+    'Najil': 'najil.jpg',
+    'Safvan': 'safvan.jpg'
 };
 
 // == Initialize Supabase ==
@@ -21,750 +21,1037 @@ let works = [];
 let currentWorkId = null;
 let editingWorkId = null;
 let currentFilters = {
-  member: 'all', status: 'all', deadline: 'all', creator: 'all', sort: 'newest'
+    member: 'all',
+    status: 'all', 
+    deadline: 'all',
+    creator: 'all',
+    sort: 'newest'
 };
 let notificationsEnabled = false;
 
 // == INITIALIZATION ==
 document.addEventListener('DOMContentLoaded', async function() {
-  updateDateTime();
-  setInterval(updateDateTime, 1000);
-
-  // Register service worker for PWA
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(err => console.log('SW registration failed'));
-  }
-
-  // Request notification permission
-  await requestNotificationPermission();
-
-  // Check if user was previously logged in
-  const savedUser = localStorage.getItem('currentUser');
-  const savedRole = localStorage.getItem('currentUserRole');
-  
-  if (savedUser && savedRole) {
-    currentUser = savedUser;
-    currentUserRole = savedRole;
-    document.getElementById('loginScreen').classList.add('hidden');
-    document.getElementById('mainApp').classList.remove('hidden');
-    document.getElementById('userName').textContent = savedUser;
-    document.getElementById('userAvatar').src = memberAvatars[savedUser];
+    updateDateTime();
+    setInterval(updateDateTime, 1000);
     
-    // Initialize app data
-    await refreshWorks();
-    setupMemberFilters();
-    subscribeToWorks();
-    subscribeToNotifications();
-    renderWorks();
-    updateStats();
-    showTab('dashboard');
-  }
+    // Register service worker for PWA
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js').catch(err => console.log('SW registration failed'));
+    }
+    
+    // Request notification permission
+    await requestNotificationPermission();
+    
+    // Check if user was previously logged in
+    const savedUser = localStorage.getItem('currentUser');
+    const savedRole = localStorage.getItem('currentUserRole');
+    
+    if (savedUser && savedRole) {
+        currentUser = savedUser;
+        currentUserRole = savedRole;
+        document.getElementById('loginScreen').classList.add('hidden');
+        document.getElementById('mainApp').classList.remove('hidden');
+        document.getElementById('userName').textContent = savedUser;
+        document.getElementById('userAvatar').src = memberAvatars[savedUser];
+        
+        // Initialize app data
+        await refreshWorks();
+        setupMemberFilters();
+        subscribeToWorks();
+        subscribeToNotifications();
+        
+        // Set default member filter to current user (except admin)
+        if (currentUserRole !== 'Administrator') {
+            setDefaultMemberFilter(savedUser);
+        }
+        
+        renderWorks();
+        updateStats();
+        updateMemberTiles();
+        showTab('dashboard');
+    }
+
+    // Set up dropdown click handlers
+    setupDropdownHandlers();
 });
+
+// == DEFAULT FILTERING ==
+function setDefaultMemberFilter(username) {
+    currentFilters.member = username;
+    selectMemberTile(username);
+}
+
+// == DROPDOWN MANAGEMENT ==
+function setupDropdownHandlers() {
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', function(event) {
+        if (!event.target.closest('.custom-dropdown')) {
+            closeAllDropdowns();
+        }
+    });
+}
+
+function closeAllDropdowns() {
+    const dropdowns = [
+        { element: 'statusDropdown', icon: 'statusFilterIcon' },
+        { element: 'deadlineDropdown', icon: 'deadlineFilterIcon' },
+        { element: 'creatorDropdown', icon: 'creatorFilterIcon' },
+        { element: 'sortDropdown', icon: 'sortFilterIcon' },
+        { element: 'assignStaffDropdown', icon: 'assignStaffIcon' },
+        { element: 'priorityDropdown', icon: 'priorityIcon' }
+    ];
+    
+    dropdowns.forEach(({ element, icon }) => {
+        const dropdown = document.getElementById(element);
+        const iconEl = document.getElementById(icon);
+        if (dropdown) {
+            dropdown.classList.add('hidden');
+        }
+        if (iconEl) {
+            iconEl.style.transform = 'rotate(0deg)';
+        }
+    });
+}
+
+function toggleDropdown(dropdownId, iconId) {
+    const dropdown = document.getElementById(dropdownId);
+    const icon = document.getElementById(iconId);
+    
+    if (!dropdown || !icon) {
+        console.error('Dropdown or icon not found:', dropdownId, iconId);
+        return;
+    }
+    
+    const isHidden = dropdown.classList.contains('hidden');
+    
+    // Close all other dropdowns first
+    closeAllDropdowns();
+    
+    if (isHidden) {
+        dropdown.classList.remove('hidden');
+        icon.style.transform = 'rotate(180deg)';
+    }
+}
+
+// Individual dropdown toggle functions
+function toggleStatusDropdown() {
+    toggleDropdown('statusDropdown', 'statusFilterIcon');
+}
+
+function toggleDeadlineDropdown() {
+    toggleDropdown('deadlineDropdown', 'deadlineFilterIcon');
+}
+
+function toggleCreatorDropdown() {
+    toggleDropdown('creatorDropdown', 'creatorFilterIcon');
+}
+
+function toggleSortDropdown() {
+    toggleDropdown('sortDropdown', 'sortFilterIcon');
+}
+
+function toggleAssignStaffDropdown() {
+    toggleDropdown('assignStaffDropdown', 'assignStaffIcon');
+}
+
+function togglePriorityDropdown() {
+    toggleDropdown('priorityDropdown', 'priorityIcon');
+}
+
+// == FILTER SELECTION FUNCTIONS ==
+function selectStatusFilter(value) {
+    currentFilters.status = value;
+    document.getElementById('statusFilterText').textContent = value === 'all' ? 'All Status' : value;
+    closeAllDropdowns();
+    renderWorks();
+}
+
+function selectDeadlineFilter(value) {
+    currentFilters.deadline = value;
+    const text = {
+        'all': 'All Deadlines',
+        'today': 'Due Today',
+        'tomorrow': 'Due Tomorrow',
+        'week': 'This Week',
+        'overdue': 'Overdue'
+    }[value] || 'All Deadlines';
+    
+    document.getElementById('deadlineFilterText').textContent = text;
+    closeAllDropdowns();
+    renderWorks();
+}
+
+function selectCreatorFilter(value) {
+    currentFilters.creator = value;
+    document.getElementById('creatorFilterText').textContent = value === 'all' ? 'All Creators' : value;
+    closeAllDropdowns();
+    renderWorks();
+}
+
+function selectSortFilter(value) {
+    currentFilters.sort = value;
+    const text = {
+        'newest': 'Newest First',
+        'oldest': 'Oldest First',
+        'deadline': 'Deadline',
+        'status': 'Status'
+    }[value] || 'Newest First';
+    
+    document.getElementById('sortFilterText').textContent = text;
+    closeAllDropdowns();
+    renderWorks();
+}
+
+function selectAssignStaff(value) {
+    const assignStaffInput = document.getElementById('assignStaff');
+    const assignStaffText = document.getElementById('assignStaffText');
+    
+    if (assignStaffInput && assignStaffText) {
+        assignStaffInput.value = value;
+        assignStaffText.textContent = value;
+    }
+    closeAllDropdowns();
+}
+
+function selectPriority(value) {
+    const priorityInput = document.getElementById('workPriority');
+    const priorityText = document.getElementById('priorityText');
+    
+    if (priorityInput && priorityText) {
+        priorityInput.value = value;
+        priorityText.textContent = value;
+    }
+    closeAllDropdowns();
+}
+
+// == CLEAR FILTERS ==
+function clearAllFilters() {
+    currentFilters = {
+        member: currentUserRole === 'Administrator' ? 'all' : currentUser,
+        status: 'all',
+        deadline: 'all',
+        creator: 'all',
+        sort: 'newest'
+    };
+    
+    // Update dropdown texts
+    document.getElementById('statusFilterText').textContent = 'All Status';
+    document.getElementById('deadlineFilterText').textContent = 'All Deadlines';
+    document.getElementById('creatorFilterText').textContent = 'All Creators';
+    document.getElementById('sortFilterText').textContent = 'Newest First';
+    
+    // Update member tile selection
+    if (currentUserRole === 'Administrator') {
+        selectMemberTile('all');
+    } else {
+        selectMemberTile(currentUser);
+    }
+    
+    closeAllDropdowns();
+    renderWorks();
+    showToast('🔄 All filters cleared', 'info');
+}
+
+// == MEMBER TILES ==
+function selectMemberTile(member) {
+    // Update visual state
+    document.querySelectorAll('.member-tile').forEach(tile => {
+        tile.classList.remove('active');
+    });
+    
+    // Find and activate the correct tile
+    const tiles = document.querySelectorAll('.member-tile');
+    tiles.forEach(tile => {
+        if ((member === 'all' && tile.textContent.includes('All')) || 
+            (member !== 'all' && tile.textContent.includes(member))) {
+            tile.classList.add('active');
+        }
+    });
+    
+    // Update filter
+    currentFilters.member = member;
+    renderWorks();
+}
+
+function updateMemberTiles() {
+    // Count works for each member
+    const counts = {
+        all: works.length,
+        Irshad: works.filter(w => w.assigned_staff === 'Irshad').length,
+        Niyas: works.filter(w => w.assigned_staff === 'Niyas').length,
+        Muhammed: works.filter(w => w.assigned_staff === 'Muhammed').length,
+        Najil: works.filter(w => w.assigned_staff === 'Najil').length,
+        Safvan: works.filter(w => w.assigned_staff === 'Safvan').length
+    };
+    
+    // Update count displays - check if elements exist
+    const countElements = [
+        { id: 'allCount', count: counts.all },
+        { id: 'irshadCount', count: counts.Irshad },
+        { id: 'niyasCount', count: counts.Niyas },
+        { id: 'muhammedCount', count: counts.Muhammed },
+        { id: 'najilCount', count: counts.Najil },
+        { id: 'safvanCount', count: counts.Safvan }
+    ];
+    
+    countElements.forEach(({ id, count }) => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.textContent = `${count} works`;
+        }
+    });
+}
+
+// == DASHBOARD NAVIGATION ==
+function goToWorksWithFilter(filterType) {
+    showTab('works');
+    
+    if (filterType === 'Pending' || filterType === 'Completed') {
+        selectStatusFilter(filterType);
+    } else if (filterType === 'today') {
+        selectDeadlineFilter('today');
+    }
+}
 
 // == NOTIFICATION MANAGEMENT ==
 async function requestNotificationPermission() {
-  if ('Notification' in window) {
-    const permission = await Notification.requestPermission();
-    notificationsEnabled = permission === 'granted';
-    
-    if (notificationsEnabled) {
-      console.log('✅ Browser notifications enabled');
-    } else {
-      console.log('⚠️ Browser notifications denied');
+    if ('Notification' in window) {
+        const permission = await Notification.requestPermission();
+        notificationsEnabled = permission === 'granted';
+        if (notificationsEnabled) {
+            console.log('✅ Browser notifications enabled');
+        } else {
+            console.log('⚠️ Browser notifications denied');
+        }
     }
-  }
 }
 
 function showBrowserNotification(title, options = {}) {
-  if (notificationsEnabled && 'Notification' in window) {
-    new Notification(title, {
-      icon: options.icon || 'logo.png',
-      body: options.body || '',
-      image: options.image,
-      requireInteraction: false,
-      ...options
-    });
-  }
+    if (notificationsEnabled && 'Notification' in window) {
+        new Notification(title, {
+            icon: options.icon || 'logo.png',
+            body: options.body || '',
+            image: options.image,
+            requireInteraction: false,
+            ...options
+        });
+    }
 }
 
 function toggleNotifications() {
-  if (!notificationsEnabled) {
-    requestNotificationPermission();
-  } else {
-    alert('Notifications are already enabled!');
-  }
+    if (!notificationsEnabled) {
+        requestNotificationPermission().then(() => {
+            if (notificationsEnabled) {
+                showToast('✅ Browser notifications enabled successfully!', 'success');
+            } else {
+                showToast('❌ Notification permission denied', 'error');
+            }
+        });
+    } else {
+        showToast('🔔 Notifications are already enabled!', 'info');
+    }
 }
 
 // == TOAST NOTIFICATIONS ==
-function showToastAvatar(msg, profile, avatar) {
-  const toast = document.createElement('div');
-  toast.className = "bg-white shadow-2xl border border-gray-200 px-5 py-4 rounded-lg flex items-center gap-3 animate-bounce-in";
-  toast.innerHTML = `
-    <img src="${avatar || 'logo.png'}" class="w-10 h-10 rounded-full border" alt="${profile}">
-    <div>
-      <div class="font-medium text-gray-800">${msg}</div>
-      <div class="text-xs text-gray-500">${new Date().toLocaleTimeString()}</div>
-    </div>
-  `;
-  document.getElementById('toastContainer').appendChild(toast);
-  setTimeout(() => toast.remove(), 4000);
+function showToast(message, type = 'info', duration = 3000) {
+    const toastContainer = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    
+    const bgColor = {
+        'success': 'bg-green-500',
+        'error': 'bg-red-500', 
+        'warning': 'bg-yellow-500',
+        'info': 'bg-blue-500'
+    }[type] || 'bg-blue-500';
+    
+    toast.className = `${bgColor} text-white px-6 py-4 rounded-lg shadow-lg animate-slide-in flex items-center gap-3 max-w-sm`;
+    toast.innerHTML = `
+        <div class="flex-1">${message}</div>
+        <button onclick="this.parentElement.remove()" class="text-white hover:text-gray-200">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+        </button>
+    `;
+    
+    toastContainer.appendChild(toast);
+    
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.remove();
+        }
+    }, duration);
 }
 
-// == LOGIN/LOGOUT ==
-window.login = async function(name, role) {
-  currentUser = name;
-  currentUserRole = role;
-  
-  // Save to localStorage for persistence
-  localStorage.setItem('currentUser', name);
-  localStorage.setItem('currentUserRole', role);
-  
-  document.getElementById('loginScreen').classList.add('hidden');
-  document.getElementById('mainApp').classList.remove('hidden');
-  document.getElementById('userName').textContent = name;
-  document.getElementById('userAvatar').src = memberAvatars[name];
-  
-  // Initialize app data
-  await refreshWorks();
-  setupMemberFilters();
-  subscribeToWorks();
-  subscribeToNotifications();
-  renderWorks();
-  updateStats();
-  showTab('dashboard');
-  
-  showToastAvatar(`Welcome back, ${name}!`, name, memberAvatars[name]);
-};
-
-window.logout = function() {
-  // Clear localStorage
-  localStorage.removeItem('currentUser');
-  localStorage.removeItem('currentUserRole');
-  
-  currentUser = null; 
-  currentUserRole = null; 
-  editingWorkId = null;
-  
-  document.getElementById('loginScreen').classList.remove('hidden');
-  document.getElementById('mainApp').classList.add('hidden');
-  
-  // Reset filters
-  currentFilters = {
-    member: 'all', status: 'all', deadline: 'all', creator: 'all', sort: 'newest'
-  };
-};
-
-// == DATE/TIME ==
-function updateDateTime() {
-  const now = new Date();
-  const timeOpt = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true };
-  const dateOpt = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-  document.getElementById('currentTime').textContent = now.toLocaleTimeString('en-US', timeOpt);
-  document.getElementById('currentDate').textContent = now.toLocaleDateString('en-US', dateOpt);
-}
-
-// == TABS ==
-window.showTab = function(tabName) {
-  document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
-  document.querySelectorAll('.nav-tab').forEach(tab => {
-    tab.classList.remove('bg-blue-600'); 
-    tab.classList.add('hover:bg-gray-700');
-  });
-  document.getElementById(tabName).classList.remove('hidden');
-  const activeTab = document.querySelector(`[data-tab="${tabName}"]`);
-  if (activeTab) { 
-    activeTab.classList.add('bg-blue-600'); 
-    activeTab.classList.remove('hover:bg-gray-700'); 
-  }
-  if(tabName === 'works') {
-    setupMemberFilters();
-    renderWorks();
-  } else if (tabName === 'add-work' && !editingWorkId) {
-    resetForm();
-  }
-};
-
-// == MEMBER FILTERS SETUP ==
-function setupMemberFilters() {
-  const memberFiltersContainer = document.getElementById('memberFilters');
-  if (!memberFiltersContainer) return;
-  
-  // Add click event listeners to member filter buttons
-  const memberButtons = memberFiltersContainer.querySelectorAll('.member-filter-btn');
-  
-  memberButtons.forEach(button => {
-    // Remove existing listeners to avoid duplicates
-    button.removeEventListener('click', handleMemberFilter);
-    button.addEventListener('click', handleMemberFilter);
-  });
-}
-
-function handleMemberFilter(event) {
-  const member = event.currentTarget.dataset.member;
-  currentFilters.member = member;
-  
-  // Update button styles
-  const allButtons = document.querySelectorAll('.member-filter-btn');
-  allButtons.forEach(btn => {
-    btn.classList.remove('member-filter-active');
-    btn.classList.add('member-filter-inactive');
-  });
-  
-  event.currentTarget.classList.remove('member-filter-inactive');
-  event.currentTarget.classList.add('member-filter-active');
-  
-  applyFilters();
-}
-
-// == FORM SUBMISSION ==
-window.submitWork = async function(event) {
-  event.preventDefault();
-  
-  const fields = {
-    name: document.getElementById('workName').value.trim(), 
-    description: document.getElementById('workDescription').value.trim(),
-    whatsapp_number: document.getElementById('whatsappNumber').value.trim(),
-    assigned_staff: document.getElementById('assignedStaff').value,
-    deadline: document.getElementById('workDeadline').value || null,
-    priority: document.getElementById('workPriority').value || 'medium'
-  };
-  
-  try {
-    if(editingWorkId) {
-      // Update existing work
-      const { error } = await supabase.from('works').update({
-        ...fields, 
-        updated_by: currentUser, 
-        updated_at: new Date().toISOString()
-      }).eq('id', editingWorkId);
-      
-      if (error) throw error;
-      
-      showToastAvatar('Work updated successfully!', currentUser, memberAvatars[currentUser]);
-      
-      // Send browser notification to other users
-      await supabase.from('notifications').insert({
-        message: `${currentUser} updated a work: ${fields.name}`,
-        profile_name: currentUser, 
-        profile_avatar: memberAvatars[currentUser],
-        action_type: 'update'
-      });
-      
-      editingWorkId = null;
-    } else {
-      // Add new work
-      const { data, error } = await supabase.from('works').insert({
-        ...fields, 
-        created_by: currentUser, 
-        created_at: new Date().toISOString(), 
-        status: 'pending'
-      }).select();
-      
-      if (error) throw error;
-      
-      showToastAvatar('Work added successfully!', currentUser, memberAvatars[currentUser]);
-      
-      // Send notification to all users
-      if (data && data[0]) {
-        await supabase.from('notifications').insert({
-          message: `${currentUser} added a new work: ${fields.name}`,
-          profile_name: currentUser, 
-          profile_avatar: memberAvatars[currentUser],
-          action_type: 'create'
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        showBrowserNotification('📋 Copied to Clipboard', {
+            body: `WhatsApp number ${text} has been copied to your clipboard`,
+            tag: 'clipboard'
         });
-      }
+        showToast('📋 WhatsApp number copied to clipboard!', 'success');
+    }).catch(() => {
+        showToast('❌ Failed to copy to clipboard', 'error');
+    });
+}
+
+// == USER AUTHENTICATION ==
+function loginUser(name, role) {
+    currentUser = name;
+    currentUserRole = role;
+    
+    // Save login state
+    localStorage.setItem('currentUser', name);
+    localStorage.setItem('currentUserRole', role);
+    
+    // Update UI
+    document.getElementById('loginScreen').classList.add('hidden');
+    document.getElementById('mainApp').classList.remove('hidden');
+    document.getElementById('userName').textContent = name;
+    document.getElementById('userAvatar').src = memberAvatars[name];
+    
+    // Initialize app data
+    refreshWorks().then(() => {
+        setupMemberFilters();
+        subscribeToWorks();
+        subscribeToNotifications();
+        
+        // Set default member filter based on role
+        if (role !== 'Administrator') {
+            setDefaultMemberFilter(name);
+        }
+        
+        renderWorks();
+        updateStats();
+        updateMemberTiles();
+        showTab('dashboard');
+    });
+    
+    showToast(`👋 Welcome back, ${name}!`, 'success');
+}
+
+function logout() {
+    if (confirm('Are you sure you want to logout?')) {
+        localStorage.removeItem('currentUser');
+        localStorage.removeItem('currentUserRole');
+        
+        currentUser = null;
+        currentUserRole = null;
+        works = [];
+        
+        // Reset filters
+        currentFilters = {
+            member: 'all',
+            status: 'all', 
+            deadline: 'all',
+            creator: 'all',
+            sort: 'newest'
+        };
+        
+        document.getElementById('mainApp').classList.add('hidden');
+        document.getElementById('loginScreen').classList.remove('hidden');
+        
+        showToast('👋 Logged out successfully', 'info');
+    }
+}
+
+// == NAVIGATION ==
+function showTab(tabName) {
+    // Hide all tab contents
+    const tabContents = document.querySelectorAll('.tab-content');
+    tabContents.forEach(content => content.classList.add('hidden'));
+    
+    // Remove active class from all tabs
+    const tabs = document.querySelectorAll('.nav-tab');
+    tabs.forEach(tab => {
+        tab.classList.remove('bg-primary', 'text-white');
+        tab.classList.add('text-gray-600', 'hover:text-gray-800', 'hover:bg-gray-100');
+    });
+    
+    // Show selected tab content
+    const tabContent = document.getElementById(`${tabName}Content`);
+    if (tabContent) {
+        tabContent.classList.remove('hidden');
     }
     
-    resetForm();
-    updateStats();
-    showTab('works');
+    // Add active class to selected tab
+    const activeTab = document.getElementById(`${tabName}Tab`);
+    if (activeTab) {
+        activeTab.classList.add('bg-primary', 'text-white');
+        activeTab.classList.remove('text-gray-600', 'hover:text-gray-800', 'hover:bg-gray-100');
+    }
     
-  } catch (error) {
-    console.error('Error submitting work:', error);
-    alert('Error submitting work. Please try again.');
-  }
-};
-
-window.resetForm = function() {
-  document.getElementById('workName').value = '';
-  document.getElementById('workDescription').value = '';
-  document.getElementById('whatsappNumber').value = '';
-  document.getElementById('assignedStaff').value = '';
-  document.getElementById('workDeadline').value = '';
-  document.getElementById('workPriority').value = 'medium';
-  editingWorkId = null;
-  document.getElementById('workFormTitle').textContent = 'Add New Work';
-  document.getElementById('submitBtn').innerHTML = `<svg class="w-4 h-4"><use href="#add-icon"/></svg><span>Add Work</span>`;
-};
-
-window.cancelEdit = function() { 
-  resetForm(); 
-  showTab('works'); 
-};
-
-// == FILTERING ==
-window.applyFilters = function() {
-  currentFilters.status = document.getElementById('statusFilter').value;
-  currentFilters.deadline = document.getElementById('deadlineFilter').value;
-  currentFilters.creator = document.getElementById('creatorFilter').value;
-  currentFilters.sort = document.getElementById('sortFilter').value;
-  renderWorks();
-};
-
-// == SUPABASE DATA OPERATIONS ==
-async function refreshWorks() {
-  try {
-    const { data, error } = await supabase
-      .from('works')
-      .select('*')
-      .order('created_at', {ascending: false});
-    
-    if (error) throw error;
-    
-    works = data || [];
-    updateStats();
-    renderWorks();
-  } catch (error) {
-    console.error('Error fetching works:', error);
-  }
+    if (tabName === 'works') {
+        renderWorks();
+        updateMemberTiles();
+    }
 }
 
-// == REALTIME SUBSCRIPTIONS ==
+// == DATE TIME ==
+function updateDateTime() {
+    const now = new Date();
+    const options = { 
+        weekday: 'short', 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric',
+        hour: '2-digit', 
+        minute: '2-digit'
+    };
+    const dateTimeElement = document.getElementById('currentDateTime');
+    if (dateTimeElement) {
+        dateTimeElement.textContent = now.toLocaleDateString('en-US', options);
+    }
+}
+
+// == WORK MANAGEMENT ==
+async function refreshWorks() {
+    try {
+        const { data, error } = await supabase
+            .from('works')
+            .select('*')
+            .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        works = data || [];
+        
+        renderWorks();
+        updateStats();
+        updateMemberTiles();
+    } catch (error) {
+        console.error('Error fetching works:', error);
+        showToast('❌ Failed to refresh works', 'error');
+    }
+}
+
+function setupMemberFilters() {
+    // This function can be used for additional setup if needed
+}
+
+// == STATUS UPDATE ==
+async function updateWorkStatus(workId, newStatus) {
+    try {
+        const { error } = await supabase
+            .from('works')
+            .update({ status: newStatus })
+            .eq('id', workId);
+        
+        if (error) throw error;
+        
+        await refreshWorks();
+        showToast('✅ Work status updated successfully!', 'success');
+        
+        // Show browser notification
+        const work = works.find(w => w.id === workId);
+        if (work) {
+            showBrowserNotification('📝 Work Status Updated', {
+                body: `"${work.work_name}" status changed to ${newStatus}`,
+                tag: 'status-update'
+            });
+        }
+        
+    } catch (error) {
+        console.error('Error updating work status:', error);
+        showToast('❌ Failed to update work status', 'error');
+    }
+}
+
+// == WORK DETAILS ==
+function showWorkDetails(workId) {
+    const work = works.find(w => w.id === workId);
+    if (!work) return;
+    
+    const modal = document.getElementById('workDetailsModal');
+    const content = document.getElementById('workDetailsContent');
+    
+    if (!modal || !content) {
+        console.error('Work details modal elements not found');
+        return;
+    }
+    
+    const statusColor = {
+        'Pending': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+        'In Progress': 'bg-blue-100 text-blue-800 border-blue-200',
+        'Completed': 'bg-green-100 text-green-800 border-green-200'
+    }[work.status] || 'bg-gray-100 text-gray-800 border-gray-200';
+    
+    const priorityColor = {
+        'High': 'bg-red-100 text-red-800 border-red-200',
+        'Medium': 'bg-yellow-100 text-yellow-800 border-yellow-200', 
+        'Low': 'bg-green-100 text-green-800 border-green-200'
+    }[work.priority] || 'bg-gray-100 text-gray-800 border-gray-200';
+    
+    const deadline = work.deadline ? new Date(work.deadline).toLocaleDateString() : 'No deadline set';
+    const createdDate = new Date(work.created_at).toLocaleDateString();
+    
+    content.innerHTML = `
+        <div class="flex items-start gap-6 mb-6">
+            <img src="${memberAvatars[work.assigned_staff]}" alt="${work.assigned_staff}" class="w-16 h-16 rounded-full object-cover ring-4 ring-primary/20">
+            <div class="flex-1">
+                <h3 class="text-2xl font-bold text-gray-900 mb-2">${work.work_name}</h3>
+                <p class="text-gray-600 mb-3">Assigned to <span class="font-semibold">${work.assigned_staff}</span></p>
+                <div class="flex flex-wrap gap-2">
+                    <span class="px-3 py-1 rounded-full text-sm font-medium border ${statusColor}">${work.status}</span>
+                    <span class="px-3 py-1 rounded-full text-sm font-medium border ${priorityColor}">${work.priority} Priority</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div class="bg-gray-50 p-4 rounded-xl">
+                <h4 class="font-semibold text-gray-800 mb-2">📅 Deadline</h4>
+                <p class="text-gray-600">${deadline}</p>
+            </div>
+            <div class="bg-gray-50 p-4 rounded-xl">
+                <h4 class="font-semibold text-gray-800 mb-2">📅 Created</h4>
+                <p class="text-gray-600">${createdDate} by ${work.created_by}</p>
+            </div>
+            ${work.whatsapp_number ? `
+                <div class="bg-gray-50 p-4 rounded-xl">
+                    <h4 class="font-semibold text-gray-800 mb-2">📱 WhatsApp</h4>
+                    <button onclick="copyToClipboard('${work.whatsapp_number}')" class="text-green-600 hover:text-green-700 font-medium">${work.whatsapp_number}</button>
+                </div>
+            ` : ''}
+        </div>
+        
+        ${work.description ? `
+            <div class="bg-gray-50 p-4 rounded-xl mb-6">
+                <h4 class="font-semibold text-gray-800 mb-2">📝 Description</h4>
+                <p class="text-gray-600 leading-relaxed">${work.description}</p>
+            </div>
+        ` : ''}
+        
+        <div class="flex gap-3">
+            <button onclick="editWork(${work.id})" class="flex-1 px-4 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors font-medium">
+                Edit Work
+            </button>
+            <button onclick="deleteWork(${work.id})" class="px-4 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium">
+                Delete
+            </button>
+        </div>
+    `;
+    
+    modal.classList.remove('hidden');
+}
+
+function closeWorkDetailsModal() {
+    const modal = document.getElementById('workDetailsModal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+}
+
+// == WORK FORM HANDLING ==
+document.addEventListener('DOMContentLoaded', function() {
+    const workForm = document.getElementById('workForm');
+    if (workForm) {
+        workForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const assignedStaff = document.getElementById('assignStaff').value;
+            if (!assignedStaff) {
+                showToast('❌ Please select a staff member', 'error');
+                return;
+            }
+            
+            const workData = {
+                work_name: document.getElementById('workName').value,
+                whatsapp_number: document.getElementById('whatsappNumber').value,
+                description: document.getElementById('workDescription').value,
+                assigned_staff: assignedStaff,
+                deadline: document.getElementById('workDeadline').value || null,
+                priority: document.getElementById('workPriority').value,
+                status: 'Pending',
+                created_by: currentUser
+            };
+            
+            try {
+                const { data, error } = await supabase
+                    .from('works')
+                    .insert([workData])
+                    .select();
+                
+                if (error) throw error;
+                
+                resetForm();
+                await refreshWorks();
+                showTab('works');
+                showToast('✅ Work added successfully!', 'success');
+                
+                // Show browser notification
+                showBrowserNotification('📝 New Work Added', {
+                    body: `"${workData.work_name}" has been assigned to ${workData.assigned_staff}`,
+                    tag: 'new-work'
+                });
+                
+            } catch (error) {
+                console.error('Error adding work:', error);
+                showToast('❌ Failed to add work', 'error');
+            }
+        });
+    }
+});
+
+function resetForm() {
+    const workForm = document.getElementById('workForm');
+    const assignStaffText = document.getElementById('assignStaffText');
+    const priorityText = document.getElementById('priorityText');
+    const assignStaff = document.getElementById('assignStaff');
+    const workPriority = document.getElementById('workPriority');
+    
+    if (workForm) {
+        workForm.reset();
+    }
+    if (assignStaffText) {
+        assignStaffText.textContent = 'Select Staff Member';
+    }
+    if (priorityText) {
+        priorityText.textContent = 'Medium';
+    }
+    if (assignStaff) {
+        assignStaff.value = '';
+    }
+    if (workPriority) {
+        workPriority.value = 'Medium';
+    }
+}
+
+// == EDIT WORK ==
+function editWork(workId) {
+    const work = works.find(w => w.id === workId);
+    if (!work) return;
+    
+    // Close work details modal if open
+    closeWorkDetailsModal();
+    
+    editingWorkId = workId;
+    
+    // Populate edit form
+    const fields = [
+        { id: 'editWorkName', value: work.work_name },
+        { id: 'editWhatsappNumber', value: work.whatsapp_number || '' },
+        { id: 'editWorkDescription', value: work.description || '' },
+        { id: 'editAssignStaff', value: work.assigned_staff },
+        { id: 'editWorkStatus', value: work.status },
+        { id: 'editWorkDeadline', value: work.deadline || '' },
+        { id: 'editWorkPriority', value: work.priority }
+    ];
+    
+    fields.forEach(({ id, value }) => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.value = value;
+        }
+    });
+    
+    // Show modal
+    const modal = document.getElementById('editWorkModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+    }
+}
+
+function closeEditModal() {
+    const modal = document.getElementById('editWorkModal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+    editingWorkId = null;
+}
+
+// Set up edit form handler
+document.addEventListener('DOMContentLoaded', function() {
+    const editForm = document.getElementById('editWorkForm');
+    if (editForm) {
+        editForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            if (!editingWorkId) return;
+            
+            const updatedWork = {
+                work_name: document.getElementById('editWorkName').value,
+                whatsapp_number: document.getElementById('editWhatsappNumber').value,
+                description: document.getElementById('editWorkDescription').value,
+                assigned_staff: document.getElementById('editAssignStaff').value,
+                status: document.getElementById('editWorkStatus').value,
+                deadline: document.getElementById('editWorkDeadline').value || null,
+                priority: document.getElementById('editWorkPriority').value
+            };
+            
+            try {
+                const { error } = await supabase
+                    .from('works')
+                    .update(updatedWork)
+                    .eq('id', editingWorkId);
+                
+                if (error) throw error;
+                
+                closeEditModal();
+                await refreshWorks();
+                showToast('✅ Work updated successfully!', 'success');
+                
+                // Show browser notification
+                showBrowserNotification('📝 Work Updated', {
+                    body: `"${updatedWork.work_name}" has been updated`,
+                    tag: 'work-update'
+                });
+                
+            } catch (error) {
+                console.error('Error updating work:', error);
+                showToast('❌ Failed to update work', 'error');
+            }
+        });
+    }
+});
+
+// == DELETE WORK ==
+async function deleteWork(workId) {
+    const work = works.find(w => w.id === workId);
+    if (!work) return;
+    
+    if (confirm(`Are you sure you want to delete "${work.work_name}"?`)) {
+        try {
+            const { error } = await supabase
+                .from('works')
+                .delete()
+                .eq('id', workId);
+            
+            if (error) throw error;
+            
+            closeWorkDetailsModal();
+            await refreshWorks();
+            showToast('🗑️ Work deleted successfully!', 'success');
+            
+            // Show browser notification
+            showBrowserNotification('🗑️ Work Deleted', {
+                body: `"${work.work_name}" has been deleted`,
+                tag: 'work-delete'
+            });
+            
+        } catch (error) {
+            console.error('Error deleting work:', error);
+            showToast('❌ Failed to delete work', 'error');
+        }
+    }
+}
+
+// == FILTERING ==
+function filterWorks() {
+    let filteredWorks = [...works];
+    
+    // Filter by member
+    if (currentFilters.member !== 'all') {
+        filteredWorks = filteredWorks.filter(work => work.assigned_staff === currentFilters.member);
+    }
+    
+    // Filter by status
+    if (currentFilters.status !== 'all') {
+        filteredWorks = filteredWorks.filter(work => work.status === currentFilters.status);
+    }
+    
+    // Filter by creator
+    if (currentFilters.creator !== 'all') {
+        filteredWorks = filteredWorks.filter(work => work.created_by === currentFilters.creator);
+    }
+    
+    // Filter by deadline
+    if (currentFilters.deadline !== 'all') {
+        const today = new Date();
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        
+        filteredWorks = filteredWorks.filter(work => {
+            if (!work.deadline) return false;
+            const deadline = new Date(work.deadline);
+            
+            switch (currentFilters.deadline) {
+                case 'today':
+                    return deadline.toDateString() === today.toDateString();
+                case 'tomorrow':
+                    return deadline.toDateString() === tomorrow.toDateString();
+                case 'week':
+                    const weekFromNow = new Date(today);
+                    weekFromNow.setDate(weekFromNow.getDate() + 7);
+                    return deadline >= today && deadline <= weekFromNow;
+                case 'overdue':
+                    return deadline < today && work.status !== 'Completed';
+                default:
+                    return true;
+            }
+        });
+    }
+    
+    // Sort works
+    switch (currentFilters.sort) {
+        case 'oldest':
+            filteredWorks.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+            break;
+        case 'deadline':
+            filteredWorks.sort((a, b) => {
+                if (!a.deadline && !b.deadline) return 0;
+                if (!a.deadline) return 1;
+                if (!b.deadline) return -1;
+                return new Date(a.deadline) - new Date(b.deadline);
+            });
+            break;
+        case 'status':
+            filteredWorks.sort((a, b) => a.status.localeCompare(b.status));
+            break;
+        case 'newest':
+        default:
+            filteredWorks.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            break;
+    }
+    
+    return filteredWorks;
+}
+
+// == RENDERING ==
+function renderWorks() {
+    const filteredWorks = filterWorks();
+    const worksTableBody = document.getElementById('worksTableBody');
+    const noWorks = document.getElementById('noWorks');
+    
+    if (!worksTableBody || !noWorks) {
+        console.error('Works table elements not found');
+        return;
+    }
+    
+    if (filteredWorks.length === 0) {
+        worksTableBody.innerHTML = '';
+        noWorks.classList.remove('hidden');
+        return;
+    }
+    
+    noWorks.classList.add('hidden');
+    
+    worksTableBody.innerHTML = filteredWorks.map(work => {
+        const statusColor = {
+            'Pending': 'bg-yellow-100 text-yellow-800',
+            'In Progress': 'bg-blue-100 text-blue-800',
+            'Completed': 'bg-green-100 text-green-800'
+        }[work.status] || 'bg-gray-100 text-gray-800';
+        
+        const deadline = work.deadline ? new Date(work.deadline).toLocaleDateString() : 'No deadline';
+        const createdDate = new Date(work.created_at).toLocaleDateString();
+        
+        return `
+            <tr class="hover:bg-gray-50 cursor-pointer" onclick="showWorkDetails(${work.id})">
+                <td class="px-6 py-4">
+                    <div class="flex flex-col gap-2">
+                        <div class="text-sm font-medium text-gray-900">${work.work_name}</div>
+                        <div class="flex items-center gap-3">
+                            <img src="${memberAvatars[work.assigned_staff]}" alt="${work.assigned_staff}" class="w-8 h-8 rounded-full object-cover">
+                            <div>
+                                <div class="text-sm font-medium text-gray-700">${work.assigned_staff}</div>
+                                <div class="text-xs text-gray-500">${work.description ? work.description.substring(0, 30) + '...' : 'No description'}</div>
+                            </div>
+                        </div>
+                    </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="status-dropdown" onclick="event.stopPropagation()">
+                        <select onchange="updateWorkStatus(${work.id}, this.value)" class="status-button ${statusColor} border-0 cursor-pointer">
+                            <option value="Pending" ${work.status === 'Pending' ? 'selected' : ''}>Pending</option>
+                            <option value="In Progress" ${work.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
+                            <option value="Completed" ${work.status === 'Completed' ? 'selected' : ''}>Completed</option>
+                        </select>
+                    </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${deadline}</td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="flex items-center gap-2">
+                        <img src="${memberAvatars[work.created_by]}" alt="${work.created_by}" class="w-6 h-6 rounded-full object-cover">
+                        <span class="text-sm text-gray-900">${work.created_by}</span>
+                    </div>
+                    <div class="text-xs text-gray-500">${createdDate}</div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap" onclick="event.stopPropagation()">
+                    ${work.whatsapp_number ? 
+                        `<button onclick="copyToClipboard('${work.whatsapp_number}')" class="text-green-600 hover:text-green-900 text-sm font-medium hover:underline">${work.whatsapp_number}</button>` : 
+                        '<span class="text-gray-400 text-sm">No number</span>'
+                    }
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium" onclick="event.stopPropagation()">
+                    <div class="flex gap-2">
+                        <button onclick="editWork(${work.id})" class="text-indigo-600 hover:text-indigo-900 hover:underline">Edit</button>
+                        <button onclick="deleteWork(${work.id})" class="text-red-600 hover:text-red-900 hover:underline">Delete</button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function updateStats() {
+    const totalWorks = works.length;
+    const pendingWorks = works.filter(work => work.status === 'Pending').length;
+    const completedWorks = works.filter(work => work.status === 'Completed').length;
+    
+    const today = new Date().toDateString();
+    const dueTodayWorks = works.filter(work => 
+        work.deadline && new Date(work.deadline).toDateString() === today && work.status !== 'Completed'
+    ).length;
+    
+    // Update stats with null checks
+    const statElements = [
+        { id: 'totalWorks', value: totalWorks },
+        { id: 'pendingWorks', value: pendingWorks },
+        { id: 'completedWorks', value: completedWorks },
+        { id: 'dueTodayWorks', value: dueTodayWorks }
+    ];
+    
+    statElements.forEach(({ id, value }) => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.textContent = value;
+        }
+    });
+}
+
+// == REAL-TIME SUBSCRIPTIONS ==
 function subscribeToWorks() {
-  supabase
-    .channel('public:works')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'works' }, async (payload) => {
-      await refreshWorks();
-      updateStats();
-      renderWorks();
-    })
-    .subscribe();
+    supabase
+        .channel('works')
+        .on('postgres_changes', 
+            { event: '*', schema: 'public', table: 'works' }, 
+            (payload) => {
+                console.log('Work change received:', payload);
+                refreshWorks();
+                
+                // Show notifications for changes
+                if (payload.eventType === 'INSERT') {
+                    showBrowserNotification('📝 New Work Added', {
+                        body: `"${payload.new.work_name}" assigned to ${payload.new.assigned_staff}`,
+                        tag: 'new-work'
+                    });
+                } else if (payload.eventType === 'UPDATE') {
+                    showBrowserNotification('📝 Work Updated', {
+                        body: `"${payload.new.work_name}" status changed to ${payload.new.status}`,
+                        tag: 'work-update'
+                    });
+                }
+            }
+        )
+        .subscribe();
 }
 
 function subscribeToNotifications() {
-  supabase
-    .channel('public:notifications')
-    .on('postgres_changes', { event: 'insert', schema: 'public', table: 'notifications' }, (payload) => {
-      const note = payload.new;
-      
-      // Only show notifications from other users
-      if (note.profile_name !== currentUser) {
-        showToastAvatar(note.message, note.profile_name, note.profile_avatar);
-        
-        // Show browser notification
-        showBrowserNotification('Work Manager Pro', {
-          body: note.message,
-          icon: note.profile_avatar || 'logo.png'
-        });
-      }
-    })
-    .subscribe();
-}
-
-// == HELPER FUNCTIONS ==
-function getPriorityClass(priority) {
-  switch (priority) {
-    case 'high': return 'priority-high';
-    case 'medium': return 'priority-medium';
-    case 'low': return 'priority-low';
-    default: return 'priority-medium';
-  }
-}
-
-function getPriorityBadge(priority) {
-  const priorityConfig = {
-    'high': { class: 'bg-red-100 text-red-800', text: 'High Priority' },
-    'medium': { class: 'bg-yellow-100 text-yellow-800', text: 'Medium Priority' },
-    'low': { class: 'bg-green-100 text-green-800', text: 'Low Priority' }
-  };
-  const config = priorityConfig[priority] || priorityConfig['medium'];
-  return `<span class="px-2 py-1 rounded-full text-xs font-medium ${config.class}">${config.text}</span>`;
-}
-
-function getDeadlineStatus(deadline) {
-  if (!deadline) return null;
-  const today = new Date(); 
-  today.setHours(0,0,0,0);
-  const deadlineDate = new Date(deadline); 
-  deadlineDate.setHours(0,0,0,0);
-  
-  if(deadlineDate.getTime() === today.getTime()) {
-    return {type:'today', text:'Due Today', class:"bg-orange-100 text-orange-800"};
-  }
-  if(deadlineDate < today) {
-    return {type:'overdue', text:'Overdue', class:"bg-red-100 text-red-800"};
-  }
-  return null;
-}
-
-function getFilteredWorks() {
-  let filteredWorks = [...works];
-  
-  if(currentFilters.member !== 'all') {
-    filteredWorks = filteredWorks.filter(w => w.assigned_staff === currentFilters.member);
-  }
-  if(currentFilters.status !== 'all') {
-    filteredWorks = filteredWorks.filter(w => w.status === currentFilters.status);
-  }
-  if(currentFilters.creator !== 'all') {
-    filteredWorks = filteredWorks.filter(w => w.created_by === currentFilters.creator);
-  }
-  if(currentFilters.deadline !== 'all') {
-    const today = new Date(); 
-    today.setHours(0,0,0,0);
-    filteredWorks = filteredWorks.filter(work => {
-      if(!work.deadline) return currentFilters.deadline === 'all';
-      const deadline = new Date(work.deadline); 
-      deadline.setHours(0,0,0,0);
-      
-      switch (currentFilters.deadline) {
-        case 'today': return deadline.getTime() === today.getTime();
-        case 'tomorrow': 
-          const tmrw = new Date(today); 
-          tmrw.setDate(tmrw.getDate()+1);
-          return deadline.getTime() === tmrw.getTime();
-        case 'this-week':
-          const weekEnd = new Date(today); 
-          weekEnd.setDate(weekEnd.getDate()+7);
-          return deadline >= today && deadline <= weekEnd;
-        case 'overdue': 
-          return deadline < today && work.status !== 'completed';
-        default: return true;
-      }
-    });
-  }
-  
-  // Sort works
-  filteredWorks.sort((a,b) => {
-    switch(currentFilters.sort){
-      case 'newest': return new Date(b.created_at) - new Date(a.created_at);
-      case 'oldest': return new Date(a.created_at) - new Date(b.created_at);
-      case 'deadline': 
-        if(!a.deadline && !b.deadline) return 0; 
-        if(!a.deadline) return 1;
-        if(!b.deadline) return -1;
-        return new Date(a.deadline) - new Date(b.deadline);
-      case 'status':
-        const st = {'pending':0,'in-progress':1,'completed':2};
-        return st[a.status] - st[b.status];
-      default: return 0;
-    }
-  });
-  
-  return filteredWorks;
-}
-
-// == RENDER WORKS ==
-function renderWorks() {
-  const worksList = document.getElementById('worksList');
-  const filteredWorks = getFilteredWorks();
-  
-  if (filteredWorks.length === 0) {
-    worksList.innerHTML = `
-      <div class="text-center py-12">
-        <svg class="w-16 h-16 text-gray-400 mx-auto mb-4"><use href="#work-icon"/></svg>
-        <h3 class="text-lg font-medium text-gray-900 mb-2">No works found</h3>
-        <p class="text-gray-600">No works match your current filter criteria</p>
-      </div>
-    `;
-    return;
-  }
-  
-  worksList.innerHTML = filteredWorks.map(work => {
-    const createdDate = new Date(work.created_at).toLocaleDateString();
-    const canEdit = currentUserRole === 'admin' || work.created_by === currentUser;
-    const deadlineStatus = getDeadlineStatus(work.deadline);
-    const priorityClass = getPriorityClass(work.priority);
-    
-    return `
-      <div class="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6 hover:shadow-xl transition-all duration-200 card-shadow ${priorityClass}">
-        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-4 gap-3">
-          <div class="flex-1">
-            <div class="flex items-center space-x-3 mb-3">
-              <img src="${memberAvatars[work.assigned_staff]}" alt="${work.assigned_staff}" class="avatar">
-              <div>
-                <h3 class="text-lg font-bold text-gray-900">${work.name}</h3>
-                <p class="text-sm text-gray-600">Assigned to ${work.assigned_staff}</p>
-              </div>
-            </div>
-            <div class="flex flex-wrap items-center gap-2 mb-2">
-              <span class="status-badge status-${work.status} px-3 py-1 rounded-full text-xs font-medium">
-                ${work.status.replace('-', ' ').toUpperCase()}
-              </span>
-              ${getPriorityBadge(work.priority)}
-              ${deadlineStatus ? `<span class="px-2 py-1 rounded-full text-xs font-medium ${deadlineStatus.class}">${deadlineStatus.text}</span>` : ''}
-            </div>
-          </div>
-          <div class="flex space-x-2">
-            ${canEdit ? `
-              <button onclick="startEditWork(${work.id})" class="bg-blue-500 text-white px-3 py-2 rounded-lg text-xs hover:bg-blue-600 transition-colors flex items-center space-x-1">
-                <svg class="w-3 h-3"><use href="#edit-icon"/></svg>
-                <span>Edit</span>
-              </button>
-            ` : ''}
-            <button onclick="openWorkModal(${work.id})" class="bg-gray-500 text-white px-3 py-2 rounded-lg text-xs hover:bg-gray-600 transition-colors flex items-center space-x-1">
-              <svg class="w-3 h-3"><use href="#view-icon"/></svg>
-              <span>View</span>
-            </button>
-          </div>
-        </div>
-        <p class="text-gray-600 mb-4 text-sm line-clamp-2">${work.description || 'No description provided'}</p>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm mb-4">
-          <div class="flex items-center space-x-2">
-            <svg class="w-4 h-4 text-gray-500"><use href="#calendar-icon"/></svg>
-            <span class="text-gray-500">Deadline:</span>
-            <span class="font-medium text-gray-900">${work.deadline ? new Date(work.deadline).toLocaleDateString() : 'No deadline'}</span>
-          </div>
-          <div class="flex items-center space-x-2">
-            <img src="${memberAvatars[work.created_by]}" alt="${work.created_by}" class="w-4 h-4 rounded-full">
-            <span class="text-gray-500">Created by:</span>
-            <span class="font-medium text-blue-600">${work.created_by}</span>
-          </div>
-        </div>
-        <div class="flex justify-between items-center text-xs text-gray-500 pt-3 border-t border-gray-100">
-          <span>Created on ${createdDate}</span>
-          ${work.whatsapp_number ? `
-            <button onclick="event.stopPropagation(); copyWhatsAppNumber('${work.whatsapp_number}')" class="bg-green-500 text-white px-3 py-1 rounded text-xs hover:bg-green-600 transition-colors flex items-center space-x-1">
-              <svg class="w-3 h-3"><use href="#phone-icon"/></svg>
-              <span>Copy WhatsApp</span>
-            </button>
-          ` : ''}
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-// == WORK OPERATIONS ==
-window.startEditWork = async function(workId) {
-  try {
-    const { data: work, error } = await supabase.from('works').select('*').eq('id', workId).single();
-    if(error || !work) {
-      alert('Work not found');
-      return;
-    }
-    
-    if(currentUserRole !== 'admin' && work.created_by !== currentUser) {
-      alert("You can only edit works that you created."); 
-      return;
-    }
-    
-    editingWorkId = workId;
-    document.getElementById('workName').value = work.name;
-    document.getElementById('workDescription').value = work.description || '';
-    document.getElementById('whatsappNumber').value = work.whatsapp_number || '';
-    document.getElementById('assignedStaff').value = work.assigned_staff;
-    document.getElementById('workDeadline').value = work.deadline || '';
-    document.getElementById('workPriority').value = work.priority || 'medium';
-    document.getElementById('workFormTitle').textContent = 'Edit Work';
-    document.getElementById('submitBtn').innerHTML = `<svg class="w-4 h-4"><use href="#edit-icon"/></svg><span>Update Work</span>`;
-    showTab('add-work');
-  } catch (error) {
-    console.error('Error loading work for edit:', error);
-    alert('Error loading work data');
-  }
-};
-
-// == MODAL OPERATIONS ==
-window.openWorkModal = async function (workId) {
-  try {
-    const { data: work, error } = await supabase.from('works').select('*').eq('id', workId).single();
-    if(error || !work) {
-      alert('Work not found');
-      return;
-    }
-    
-    currentWorkId = workId;
-    document.getElementById('modalWorkName').textContent = work.name;
-    document.getElementById('modalDescription').textContent = work.description || 'No description provided';
-    document.getElementById('modalAssigned').textContent = work.assigned_staff;
-    document.getElementById('modalAssignedAvatar').src = memberAvatars[work.assigned_staff];
-    document.getElementById('modalAssignedAvatarSmall').src = memberAvatars[work.assigned_staff];
-    document.getElementById('modalDeadline').textContent = work.deadline ? new Date(work.deadline).toLocaleDateString() : 'No deadline';
-    document.getElementById('modalCreatedBy').textContent = work.created_by;
-    document.getElementById('modalCreatorAvatar').src = memberAvatars[work.created_by];
-    document.getElementById('modalCreatedAt').textContent = new Date(work.created_at).toLocaleDateString();
-    document.getElementById('modalStatus').value = work.status;
-    document.getElementById('modalPriorityBadge').innerHTML = getPriorityBadge(work.priority);
-
-    // Handle WhatsApp
-    if (work.whatsapp_number) {
-      document.getElementById('modalWhatsapp').classList.remove('hidden');
-      document.getElementById('modalWhatsappNumber').value = work.whatsapp_number;
-    } else { 
-      document.getElementById('modalWhatsapp').classList.add('hidden'); 
-    }
-
-    // Handle permissions
-    const statusSection = document.getElementById('statusUpdateSection');
-    const statusSelect = document.getElementById('modalStatus');
-    const editBtn = document.getElementById('editWorkBtn');
-    const deleteBtn = document.getElementById('deleteWorkBtn');
-    
-    if (currentUserRole === 'admin' || work.assigned_staff === currentUser) {
-      statusSelect.disabled = false; 
-      statusSection.classList.remove('hidden');
-    } else { 
-      statusSelect.disabled = true; 
-      statusSection.classList.add('hidden'); 
-    }
-    
-    const canEdit = currentUserRole === 'admin' || work.created_by === currentUser;
-    const canDelete = currentUserRole === 'admin' || work.created_by === currentUser;
-    
-    if (canEdit) editBtn.classList.remove('hidden'); 
-    else editBtn.classList.add('hidden');
-    
-    if (canDelete) deleteBtn.classList.remove('hidden'); 
-    else deleteBtn.classList.add('hidden');
-    
-    const workActions = document.getElementById('workActions');
-    if (!canEdit && !canDelete) workActions.classList.add('hidden');
-    else workActions.classList.remove('hidden');
-    
-    document.getElementById('workModal').classList.remove('hidden');
-  } catch (error) {
-    console.error('Error loading work modal:', error);
-    alert('Error loading work details');
-  }
-};
-
-window.editWork = function() {
-  if(currentWorkId) { 
-    closeModal(); 
-    startEditWork(currentWorkId); 
-  }
-};
-
-window.deleteWork = async function() {
-  if(!currentWorkId) return;
-  
-  try {
-    const { data: work, error: fetchError } = await supabase.from('works').select('*').eq('id', currentWorkId).single();
-    if(fetchError || !work) {
-      alert('Work not found');
-      return;
-    }
-    
-    if(currentUserRole !== 'admin' && work.created_by !== currentUser) {
-      alert('You can only delete works that you created.'); 
-      return;
-    }
-    
-    if(confirm('Are you sure you want to delete this work? This action cannot be undone.')) {
-      const { error } = await supabase.from('works').delete().eq('id', currentWorkId);
-      if (error) throw error;
-      
-      // Send delete notification
-      await supabase.from('notifications').insert({
-        message: `${currentUser} deleted a work: ${work.name}`,
-        profile_name: currentUser, 
-        profile_avatar: memberAvatars[currentUser],
-        action_type: 'delete'
-      });
-      
-      closeModal(); 
-      updateStats(); 
-      renderWorks();
-      showToastAvatar('Work deleted successfully!', currentUser, memberAvatars[currentUser]);
-    }
-  } catch (error) {
-    console.error('Error deleting work:', error);
-    alert('Error deleting work');
-  }
-};
-
-window.closeModal = function() {
-  document.getElementById('workModal').classList.add('hidden'); 
-  currentWorkId = null;
-};
-
-window.updateWorkStatus = async function() {
-  if(!currentWorkId) return;
-  
-  try {
-    const { data: work, error: fetchError } = await supabase.from('works').select('*').eq('id', currentWorkId).single();
-    if(fetchError || !work) {
-      alert('Work not found');
-      return;
-    }
-    
-    if(currentUserRole !== 'admin' && work.assigned_staff !== currentUser) {
-      alert('You can only update status of works assigned to you.'); 
-      return;
-    }
-    
-    const newStatus = document.getElementById('modalStatus').value;
-    const { error } = await supabase.from('works').update({
-      status: newStatus,
-      status_updated_by: currentUser,
-      status_updated_at: new Date().toISOString()
-    }).eq('id', currentWorkId);
-    
-    if (error) throw error;
-    
-    // Send status update notification
-    await supabase.from('notifications').insert({
-      message: `${currentUser} updated work status to ${newStatus.replace('-',' ').toUpperCase()}: ${work.name}`,
-      profile_name: currentUser, 
-      profile_avatar: memberAvatars[currentUser],
-      action_type: 'status_update'
-    });
-    
-    updateStats(); 
-    renderWorks();
-    showToastAvatar(`Work status updated to ${newStatus.replace('-',' ').toUpperCase()}`, currentUser, memberAvatars[currentUser]);
-    
-  } catch (error) {
-    console.error('Error updating work status:', error);
-    alert('Error updating work status');
-  }
-};
-
-// == WHATSAPP FUNCTIONS ==
-window.copyWhatsApp = function() {
-  const number = document.getElementById('modalWhatsappNumber').value;
-  copyWhatsAppNumber(number);
-}
-
-window.copyWhatsAppNumber = function(number) {
-  navigator.clipboard.writeText(number).then(() => {
-    const button = event.target.closest('button');
-    const originalHTML = button.innerHTML;
-    button.innerHTML = `<svg class="w-3 h-3"><use href="#copy-icon"/></svg><span>Copied!</span>`;
-    button.classList.add('bg-green-600');
-    setTimeout(() => { 
-      button.innerHTML = originalHTML; 
-      button.classList.remove('bg-green-600'); 
-    }, 2000);
-  }).catch(() => {
-    // Fallback
-    const textArea = document.createElement('textarea');
-    textArea.value = number; 
-    document.body.appendChild(textArea); 
-    textArea.select();
-    document.execCommand('copy'); 
-    document.body.removeChild(textArea);
-    alert('WhatsApp number copied to clipboard!');
-  });
-};
-
-// == DASHBOARD STATS ==
-function updateStats() {
-  const total = works.length;
-  const pending = works.filter(w => w.status === 'pending').length;
-  const completed = works.filter(w => w.status === 'completed').length;
-  const today = new Date(); 
-  today.setHours(0,0,0,0);
-  const dueToday = works.filter(work => {
-    if (!work.deadline) return false;
-    const deadline = new Date(work.deadline); 
-    deadline.setHours(0,0,0,0);
-    return deadline.getTime() === today.getTime();
-  }).length;
-  
-  document.getElementById('totalWorks').textContent = total;
-  document.getElementById('pendingWorks').textContent = pending;
-  document.getElementById('completedWorks').textContent = completed;
-  document.getElementById('dueTodayWorks').textContent = dueToday;
+    supabase
+        .channel('notifications')
+        .on('postgres_changes', 
+            { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${currentUser}` }, 
+            (payload) => {
+                console.log('Notification received:', payload);
+                const notification = payload.new;
+                
+                showBrowserNotification(notification.title, {
+                    body: notification.message,
+                    tag: notification.type
+                });
+                
+                showToast(`🔔 ${notification.message}`, 'info');
+            }
+        )
+        .subscribe();
 }
