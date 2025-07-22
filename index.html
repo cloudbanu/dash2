@@ -3,237 +3,156 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Work Manager Pro</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <title>Ace Creative</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#1f2937">
-    <link rel="icon" href="logo.png" type="image/png">
+    <link rel="icon" type="image/png" href="logo.png">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#6366f1',
+                        secondary: '#8b5cf6',
+                        accent: '#06b6d4',
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.5s ease-in-out',
+                        'slide-in': 'slideIn 0.3s ease-out',
+                        'bounce-in': 'bounceIn 0.6s ease-out',
+                        'slide-down': 'slideDown 0.2s ease-out',
+                        'scale-in': 'scaleIn 0.2s ease-out',
+                    }
+                }
+            }
+        }
+     </script>
     <style>
-        /* Custom styles for professional look */
-        .card-shadow { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); }
-        .card-shadow:hover { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15); }
-        .priority-high { border-left: 4px solid #ef4444; }
-        .priority-medium { border-left: 4px solid #f59e0b; }
-        .priority-low { border-left: 4px solid #10b981; }
-        .avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
-        .avatar-lg { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; }
-        
-        /* Status badges */
-        .status-pending { background-color: #fef3c7; color: #92400e; }
-        .status-in-progress { background-color: #dbeafe; color: #1e40af; }
-        .status-completed { background-color: #d1fae5; color: #065f46; }
-        
-        .line-clamp-2 {
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
-        
-        /* Mobile responsive improvements */
-        @media (max-width: 640px) {
-            .member-filter-btn {
-                font-size: 12px;
-                padding: 8px 12px;
-            }
-            
-            .nav-tab {
-                font-size: 14px;
-                padding: 12px 16px;
-            }
-            
-            .status-badge {
-                font-size: 11px;
-                padding: 4px 8px;
-            }
-            
-            .avatar {
-                width: 32px;
-                height: 32px;
-            }
-            
-            .avatar-lg {
-                width: 48px;
-                height: 48px;
-            }
+        @keyframes slideIn {
+            from { transform: translateX(-100%); }
+            to { transform: translateX(0); }
         }
-        
-        /* Smooth transitions */
-        .card-shadow {
-            transition: all 0.2s ease-in-out;
-        }
-        
-        /* Navigation scrolling */
-        .nav-tab {
-            scroll-snap-align: start;
-        }
-        
-        nav > div > div {
-            scroll-snap-type: x mandatory;
-            -webkit-overflow-scrolling: touch;
-        }
-        
-        /* Priority indicators */
-        .priority-high {
-            background: linear-gradient(to right, #ef4444 0%, #ef4444 4px, #ffffff 4px);
-        }
-        
-        .priority-medium {
-            background: linear-gradient(to right, #f59e0b 0%, #f59e0b 4px, #ffffff 4px);
-        }
-        
-        .priority-low {
-            background: linear-gradient(to right, #10b981 0%, #10b981 4px, #ffffff 4px);
-        }
-
-        /* Toast animations */
-        .animate-bounce-in {
-            animation: bounceIn 0.4s cubic-bezier(0.4, 2, 0.6, 0.8);
-        }
-        
         @keyframes bounceIn {
-            0% {
-                opacity: 0;
-                transform: scale(0.5);
-            }
-            80% {
-                opacity: 1;
-                transform: scale(1.04);
-            }
-            100% {
-                opacity: 1;
-                transform: scale(1);
-            }
+            0% { transform: scale(0.3); opacity: 0; }
+            50% { transform: scale(1.05); }
+            70% { transform: scale(0.9); }
+            100% { transform: scale(1); opacity: 1; }
         }
-
-        /* Member filter active state */
-        .member-filter-active {
-            background-color: #1f2937 !important;
-            color: white !important;
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
-        
-        .member-filter-inactive {
-            background-color: #e5e7eb;
-            color: #374151;
+        @keyframes scaleIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
         }
-        
-        .member-filter-inactive:hover {
-            background-color: #d1d5db;
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .custom-dropdown {
+            position: relative;
+        }
+        .dropdown-button {
+            @apply w-full p-4 bg-white border border-gray-300 rounded-lg text-left flex items-center justify-between hover:border-primary focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200;
+        }
+        .dropdown-menu {
+            @apply absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto;
+            box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .dropdown-item {
+            @apply px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors duration-150 text-gray-700 border-b border-gray-100 last:border-b-0;
+        }
+        .dropdown-item:hover {
+            @apply bg-gray-50;
+        }
+        .dropdown-item.selected {
+            @apply bg-cyan-400 text-white;
+        }
+        .dropdown-item.clear-option {
+            @apply text-red-600 hover:bg-red-50 font-medium border-t-2 border-gray-200;
+        }
+        .member-tile {
+            @apply bg-white rounded-xl p-4 border-2 border-gray-200 hover:border-primary transition-all duration-200 cursor-pointer flex items-center gap-3;
+        }
+        .member-tile.active {
+            @apply border-primary bg-primary/5;
+        }
+        .status-dropdown {
+            @apply relative inline-block;
+        }
+        .status-button {
+            @apply px-3 py-1 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity;
         }
     </style>
 </head>
-<body class="bg-gray-50 font-sans">
-    <!-- SVG Icons -->
-    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
-        <defs>
-            <symbol id="dashboard-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="7" height="7"/>
-                <rect x="14" y="3" width="7" height="7"/>
-                <rect x="14" y="14" width="7" height="7"/>
-                <rect x="3" y="14" width="7" height="7"/>
-            </symbol>
-            <symbol id="work-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14,2 14,8 20,8"/>
-                <line x1="16" y1="13" x2="8" y2="13"/>
-                <line x1="16" y1="17" x2="8" y2="17"/>
-                <polyline points="10,9 9,9 8,9"/>
-            </symbol>
-            <symbol id="add-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="8" x2="12" y2="16"/>
-                <line x1="8" y1="12" x2="16" y2="12"/>
-            </symbol>
-            <symbol id="edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                <path d="M18.5 2.5a2.121 2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-            </symbol>
-            <symbol id="view-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                <circle cx="12" cy="12" r="3"/>
-            </symbol>
-            <symbol id="delete-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="3,6 5,6 21,6"/>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                <line x1="10" y1="11" x2="10" y2="17"/>
-                <line x1="14" y1="11" x2="14" y2="17"/>
-            </symbol>
-            <symbol id="calendar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                <line x1="16" y1="2" x2="16" y2="6"/>
-                <line x1="8" y1="2" x2="8" y2="6"/>
-                <line x1="3" y1="10" x2="21" y2="10"/>
-            </symbol>
-            <symbol id="user-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                <circle cx="12" cy="7" r="4"/>
-            </symbol>
-            <symbol id="phone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-            </symbol>
-            <symbol id="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-            </symbol>
-            <symbol id="logout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                <polyline points="16,17 21,12 16,7"/>
-                <line x1="21" y1="12" x2="9" y2="12"/>
-            </symbol>
-            <symbol id="filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="22,3 2,3 10,12.46 10,19 14,21 14,12.46"/>
-            </symbol>
-            <symbol id="notification-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-            </symbol>
-        </defs>
-    </svg>
 
+<body class="bg-gray-50 min-h-screen">
     <!-- Login Screen -->
-    <div id="loginScreen" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 to-purple-700 px-4">
-        <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl w-full max-w-md">
+    <div id="loginScreen" class="min-h-screen gradient-bg flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md animate-fade-in">
             <div class="text-center mb-8">
-                <img src="logo.png" alt="Logo" class="mx-auto h-16 w-16 mb-4 rounded-xl shadow-lg">
-                <h1 class="text-2xl font-bold text-gray-900">Work Manager Pro</h1>
-                <p class="text-gray-600 mt-2">Select your profile to continue</p>
+                <img src="logo.png" alt="Ace Creative" class="w-24 h-18 mx-auto mb-4 rounded-xl object-cover">
+                <h1 class="text-2xl font-bold text-gray-800 mb-2">Welcome Back</h1>
+                <p class="text-gray-600">Select your profile to continue</p>
             </div>
             
             <div class="space-y-3">
-                <button onclick="login('Irshad', 'admin')" class="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 px-4 rounded-xl font-medium hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center space-x-3">
-                    <img src="irshad.jpg" alt="Irshad" class="avatar">
-                    <div class="text-left flex-1">
+                <button onclick="loginUser('Irshad', 'Administrator')" 
+                        class="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-primary hover:bg-primary hover:text-white transition-all duration-300 card-hover">
+                    <img src="irshad.jpg" alt="Irshad" class="w-12 h-12 rounded-full object-cover">
+                    <div class="text-left">
                         <div class="font-semibold">Irshad</div>
-                        <div class="text-xs opacity-90">Administrator</div>
+                        <div class="text-sm opacity-75">Administrator</div>
                     </div>
                 </button>
-                <button onclick="login('Niyas', 'staff')" class="w-full bg-gradient-to-r from-green-500 to-teal-600 text-white py-3 px-4 rounded-xl font-medium hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center space-x-3">
-                    <img src="niyas.jpg" alt="Niyas" class="avatar">
-                    <div class="text-left flex-1">
+                
+                <button onclick="loginUser('Niyas', 'Staff Member')" 
+                        class="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-primary hover:bg-primary hover:text-white transition-all duration-300 card-hover">
+                    <img src="niyas.jpg" alt="Niyas" class="w-12 h-12 rounded-full object-cover">
+                    <div class="text-left">
                         <div class="font-semibold">Niyas</div>
-                        <div class="text-xs opacity-90">Staff Member</div>
+                        <div class="text-sm opacity-75">Staff Member</div>
                     </div>
                 </button>
-                <button onclick="login('Muhammed', 'staff')" class="w-full bg-gradient-to-r from-green-500 to-teal-600 text-white py-3 px-4 rounded-xl font-medium hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center space-x-3">
-                    <img src="muhammed.jpg" alt="Muhammed" class="avatar">
-                    <div class="text-left flex-1">
+                
+                <button onclick="loginUser('Muhammed', 'Staff Member')" 
+                        class="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-primary hover:bg-primary hover:text-white transition-all duration-300 card-hover">
+                    <img src="muhammed.jpg" alt="Muhammed" class="w-12 h-12 rounded-full object-cover">
+                    <div class="text-left">
                         <div class="font-semibold">Muhammed</div>
-                        <div class="text-xs opacity-90">Staff Member</div>
+                        <div class="text-sm opacity-75">Staff Member</div>
                     </div>
                 </button>
-                <button onclick="login('Najil', 'staff')" class="w-full bg-gradient-to-r from-green-500 to-teal-600 text-white py-3 px-4 rounded-xl font-medium hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center space-x-3">
-                    <img src="najil.jpg" alt="Najil" class="avatar">
-                    <div class="text-left flex-1">
+                
+                <button onclick="loginUser('Najil', 'Staff Member')" 
+                        class="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-primary hover:bg-primary hover:text-white transition-all duration-300 card-hover">
+                    <img src="najil.jpg" alt="Najil" class="w-12 h-12 rounded-full object-cover">
+                    <div class="text-left">
                         <div class="font-semibold">Najil</div>
-                        <div class="text-xs opacity-90">Staff Member</div>
+                        <div class="text-sm opacity-75">Staff Member</div>
                     </div>
                 </button>
-                <button onclick="login('Safvan', 'staff')" class="w-full bg-gradient-to-r from-green-500 to-teal-600 text-white py-3 px-4 rounded-xl font-medium hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center space-x-3">
-                    <img src="safvan.jpg" alt="Safvan" class="avatar">
-                    <div class="text-left flex-1">
+                
+                <button onclick="loginUser('Safvan', 'Staff Member')" 
+                        class="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-primary hover:bg-primary hover:text-white transition-all duration-300 card-hover">
+                    <img src="safvan.jpg" alt="Safvan" class="w-12 h-12 rounded-full object-cover">
+                    <div class="text-left">
                         <div class="font-semibold">Safvan</div>
-                        <div class="text-xs opacity-90">Staff Member</div>
+                        <div class="text-sm opacity-75">Staff Member</div>
                     </div>
                 </button>
             </div>
@@ -241,355 +160,511 @@
     </div>
 
     <!-- Main App -->
-    <div id="mainApp" class="hidden min-h-screen">
-        <!-- Header -->
-        <header class="bg-white shadow-lg border-b border-gray-200 sticky top-0 z-40">
-            <div class="max-w-7xl mx-auto px-4 py-4">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center space-x-3">
-                        <img src="logo.png" alt="Logo" class="h-8 w-8 sm:h-10 sm:w-10 rounded-lg">
+    <div id="mainApp" class="hidden min-h-screen bg-gray-50">
+        <!-- Modern Navigation -->
+        <nav class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center h-16">
+                    <!-- Logo and Brand -->
+                    <div class="flex items-center gap-4">
+                        <img src="logo.png" alt="Ace Creative" class="h-10 w-13 rounded-lg object-cover">
                         <div>
-                            <h1 class="text-lg sm:text-xl font-bold text-gray-900">Work Manager Pro</h1>
-                            <div class="flex items-center space-x-2">
-                                <img id="userAvatar" src="" alt="User" class="w-5 h-5 rounded-full">
-                                <p class="text-xs sm:text-sm text-gray-600">Welcome, <span id="userName" class="font-medium"></span></p>
-                                <button id="notificationBtn" onclick="toggleNotifications()" class="ml-2 p-1 text-gray-600 hover:text-blue-600 transition-colors">
-                                    <svg class="w-4 h-4"><use href="#notification-icon"/></svg>
-                                </button>
-                            </div>
+                            <div class="font-bold text-gray-800 text-lg">Ace Creative</div>
+                            <div class="text-xs text-gray-500">Work Management</div>
                         </div>
                     </div>
-                    
-                    <div class="text-right">
-                        <div id="currentTime" class="text-sm sm:text-lg font-bold text-blue-600"></div>
-                        <div id="currentDate" class="text-xs sm:text-sm text-gray-600"></div>
-                    </div>
-                    
-                    <button onclick="logout()" class="bg-red-500 text-white px-3 py-2 sm:px-4 rounded-lg hover:bg-red-600 transition-colors text-sm flex items-center space-x-1">
-                        <svg class="w-4 h-4"><use href="#logout-icon"/></svg>
-                        <span class="hidden sm:inline">Logout</span>
-                    </button>
-                </div>
-            </div>
-        </header>
 
-        <!-- Navigation -->
-        <nav class="bg-gray-800 text-white sticky top-16 z-30">
-            <div class="max-w-7xl mx-auto px-4">
-                <div class="flex space-x-1 overflow-x-auto">
-                    <button onclick="showTab('dashboard')" class="nav-tab px-4 sm:px-6 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap flex items-center space-x-2" data-tab="dashboard">
-                        <svg class="w-4 h-4"><use href="#dashboard-icon"/></svg>
-                        <span>Dashboard</span>
-                    </button>
-                    <button onclick="showTab('works')" class="nav-tab px-4 sm:px-6 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap flex items-center space-x-2" data-tab="works">
-                        <svg class="w-4 h-4"><use href="#work-icon"/></svg>
-                        <span>All Works</span>
-                    </button>
-                    <button onclick="showTab('add-work')" class="nav-tab px-4 sm:px-6 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap flex items-center space-x-2" data-tab="add-work">
-                        <svg class="w-4 h-4"><use href="#add-icon"/></svg>
-                        <span>Add Work</span>
-                    </button>
+                    <!-- Navigation Tabs -->
+                    <div class="flex space-x-1">
+                        <button onclick="showTab('dashboard')" id="dashboardTab" 
+                                class="nav-tab px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 bg-primary text-white">
+                            <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v6H8V5z"></path>
+                            </svg>
+                            Dashboard
+                        </button>
+                        <button onclick="showTab('works')" id="worksTab" 
+                                class="nav-tab px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 text-gray-600 hover:text-gray-800 hover:bg-gray-100">
+                            <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                            </svg>
+                            All Works
+                        </button>
+                        <button onclick="showTab('add')" id="addTab" 
+                                class="nav-tab px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 text-gray-600 hover:text-gray-800 hover:bg-gray-100">
+                            <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                            Add Work
+                        </button>
+                    </div>
+
+                    <!-- User Profile and Actions -->
+                    <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-3">
+                            <img id="userAvatar" src="" alt="User" class="w-10 h-10 rounded-full object-cover ring-2 ring-primary/20">
+                            <div class="hidden md:block">
+                                <div id="userName" class="font-semibold text-gray-800 text-sm"></div>
+                                <div id="currentDateTime" class="text-xs text-gray-500"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center gap-2">
+                            <button onclick="toggleNotifications()" class="p-2 text-gray-400 hover:text-gray-600 transition-colors duration-200 rounded-full hover:bg-gray-100">
+                                <div class="relative">
+                                    <div class="w-6 h-6 bg-gradient-to-r from-primary to-secondary rounded-full flex items-center justify-center">
+                                        <svg class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z"></path>
+                                        </svg>
+                                    </div>
+                                </div>
+                            </button>
+                            <button onclick="logout()" class="p-2 text-red-400 hover:text-red-600 transition-colors duration-200 rounded-full hover:bg-red-50">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </nav>
 
-        <!-- Content -->
-        <main class="max-w-7xl mx-auto px-4 py-6 sm:py-8">
-            <!-- Dashboard Tab -->
-            <div id="dashboard" class="tab-content">
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
-                    <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-4 sm:p-6 text-white card-shadow">
-                        <h3 class="text-base sm:text-lg font-medium">Total Works</h3>
-                        <p id="totalWorks" class="text-2xl sm:text-3xl font-bold mt-2">0</p>
+        <!-- Dashboard Tab -->
+        <div id="dashboardContent" class="tab-content">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <!-- Stats Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 card-hover transition-all duration-300">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-gray-600">Total Works</p>
+                                <p id="totalWorks" class="text-3xl font-bold text-gray-900">0</p>
+                            </div>
+                            <div class="bg-blue-100 p-3 rounded-full">
+                                <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="mt-2 text-xs text-gray-500">All assigned works</div>
                     </div>
-                    <div class="bg-gradient-to-r from-yellow-500 to-orange-500 rounded-xl p-4 sm:p-6 text-white card-shadow">
-                        <h3 class="text-base sm:text-lg font-medium">Pending</h3>
-                        <p id="pendingWorks" class="text-2xl sm:text-3xl font-bold mt-2">0</p>
+
+                    <div onclick="goToWorksWithFilter('Pending')" class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 card-hover transition-all duration-300 cursor-pointer">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-gray-600">Pending</p>
+                                <p id="pendingWorks" class="text-3xl font-bold text-orange-600">0</p>
+                            </div>
+                            <div class="bg-orange-100 p-3 rounded-full">
+                                <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="mt-2 text-xs text-gray-500">Awaiting action • Click to view</div>
                     </div>
-                    <div class="bg-gradient-to-r from-green-500 to-green-600 rounded-xl p-4 sm:p-6 text-white card-shadow">
-                        <h3 class="text-base sm:text-lg font-medium">Completed</h3>
-                        <p id="completedWorks" class="text-2xl sm:text-3xl font-bold mt-2">0</p>
+
+                    <div onclick="goToWorksWithFilter('Completed')" class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 card-hover transition-all duration-300 cursor-pointer">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-gray-600">Completed</p>
+                                <p id="completedWorks" class="text-3xl font-bold text-green-600">0</p>
+                            </div>
+                            <div class="bg-green-100 p-3 rounded-full">
+                                <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="mt-2 text-xs text-gray-500">Successfully finished • Click to view</div>
                     </div>
-                    <div class="bg-gradient-to-r from-red-500 to-red-600 rounded-xl p-4 sm:p-6 text-white card-shadow">
-                        <h3 class="text-base sm:text-lg font-medium">Due Today</h3>
-                        <p id="dueTodayWorks" class="text-2xl sm:text-3xl font-bold mt-2">0</p>
+
+                    <div onclick="goToWorksWithFilter('today')" class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 card-hover transition-all duration-300 cursor-pointer">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-gray-600">Due Today</p>
+                                <p id="dueTodayWorks" class="text-3xl font-bold text-red-600">0</p>
+                            </div>
+                            <div class="bg-red-100 p-3 rounded-full">
+                                <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="mt-2 text-xs text-gray-500">Urgent attention needed • Click to view</div>
                     </div>
                 </div>
 
-                <div class="bg-white rounded-xl shadow-lg p-4 sm:p-6 card-shadow">
-                    <h2 class="text-lg sm:text-xl font-bold text-gray-900 mb-4">Quick Actions</h2>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <button onclick="showTab('works')" class="bg-blue-500 text-white p-4 rounded-lg hover:bg-blue-600 transition-colors text-left flex items-center space-x-3">
-                            <svg class="w-6 h-6"><use href="#work-icon"/></svg>
-                            <div>
-                                <h3 class="font-medium">View All Works</h3>
-                                <p class="text-sm opacity-90 mt-1">Manage and track work progress</p>
+                <!-- Quick Actions -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h3>
+                        <div class="space-y-3">
+                            <button onclick="showTab('works')" class="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-primary to-secondary text-white hover:from-primary/90 hover:to-secondary/90 transition-all duration-300 card-hover">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                                </svg>
+                                <div class="text-left">
+                                    <div class="font-semibold">View All Works</div>
+                                    <div class="text-sm opacity-90">Manage and track work progress</div>
+                                </div>
+                            </button>
+
+                            <button onclick="showTab('add')" class="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-accent to-green-500 text-white hover:from-accent/90 hover:to-green-500/90 transition-all duration-300 card-hover">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                </svg>
+                                <div class="text-left">
+                                    <div class="font-semibold">Add New Work</div>
+                                    <div class="text-sm opacity-90">Create and assign new tasks</div>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Recent Activity</h3>
+                        <div id="recentActivity" class="space-y-3">
+                            <p class="text-gray-500 text-center py-8">No recent activity</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- All Works Tab -->
+        <div id="worksContent" class="tab-content hidden">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <!-- Filters -->
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 mb-6">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">Filter Works</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                        <!-- Status Filter -->
+                        <div class="custom-dropdown">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Filter by Status:</label>
+                            <button id="statusFilterButton" onclick="toggleStatusDropdown()" class="dropdown-button">
+                                <span id="statusFilterText">All Status</span>
+                                <svg class="w-5 h-5 text-gray-400 transition-transform" id="statusFilterIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </button>
+                            <div id="statusDropdown" class="dropdown-menu hidden animate-slide-down">
+                                <div class="dropdown-item" onclick="selectStatusFilter('all')">All Status</div>
+                                <div class="dropdown-item" onclick="selectStatusFilter('Pending')">Pending</div>
+                                <div class="dropdown-item" onclick="selectStatusFilter('In Progress')">In Progress</div>
+                                <div class="dropdown-item" onclick="selectStatusFilter('Completed')">Completed</div>
+                                <div class="dropdown-item clear-option" onclick="clearAllFilters()">
+                                    <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                    </svg>
+                                    Clear All Filters
+                                </div>
                             </div>
-                        </button>
-                        <button onclick="showTab('add-work')" class="bg-green-500 text-white p-4 rounded-lg hover:bg-green-600 transition-colors text-left flex items-center space-x-3">
-                            <svg class="w-6 h-6"><use href="#add-icon"/></svg>
-                            <div>
-                                <h3 class="font-medium">Add New Work</h3>
-                                <p class="text-sm opacity-90 mt-1">Create and assign new tasks</p>
+                        </div>
+                        
+                        <!-- Deadline Filter -->
+                        <div class="custom-dropdown">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Filter by Deadline:</label>
+                            <button id="deadlineFilterButton" onclick="toggleDeadlineDropdown()" class="dropdown-button">
+                                <span id="deadlineFilterText">All Deadlines</span>
+                                <svg class="w-5 h-5 text-gray-400 transition-transform" id="deadlineFilterIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </button>
+                            <div id="deadlineDropdown" class="dropdown-menu hidden animate-slide-down">
+                                <div class="dropdown-item" onclick="selectDeadlineFilter('all')">All Deadlines</div>
+                                <div class="dropdown-item" onclick="selectDeadlineFilter('today')">Due Today</div>
+                                <div class="dropdown-item" onclick="selectDeadlineFilter('tomorrow')">Due Tomorrow</div>
+                                <div class="dropdown-item" onclick="selectDeadlineFilter('week')">This Week</div>
+                                <div class="dropdown-item" onclick="selectDeadlineFilter('overdue')">Overdue</div>
                             </div>
-                        </button>
+                        </div>
+                        
+                        <!-- Creator Filter -->
+                        <div class="custom-dropdown">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Created by:</label>
+                            <button id="creatorFilterButton" onclick="toggleCreatorDropdown()" class="dropdown-button">
+                                <span id="creatorFilterText">All Creators</span>
+                                <svg class="w-5 h-5 text-gray-400 transition-transform" id="creatorFilterIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </button>
+                            <div id="creatorDropdown" class="dropdown-menu hidden animate-slide-down">
+                                <div class="dropdown-item" onclick="selectCreatorFilter('all')">All Creators</div>
+                                <div class="dropdown-item" onclick="selectCreatorFilter('Irshad')">Irshad</div>
+                                <div class="dropdown-item" onclick="selectCreatorFilter('Niyas')">Niyas</div>
+                                <div class="dropdown-item" onclick="selectCreatorFilter('Muhammed')">Muhammed</div>
+                                <div class="dropdown-item" onclick="selectCreatorFilter('Najil')">Najil</div>
+                                <div class="dropdown-item" onclick="selectCreatorFilter('Safvan')">Safvan</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Sort Filter -->
+                        <div class="custom-dropdown">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Sort by:</label>
+                            <button id="sortFilterButton" onclick="toggleSortDropdown()" class="dropdown-button">
+                                <span id="sortFilterText">Newest First</span>
+                                <svg class="w-5 h-5 text-gray-400 transition-transform" id="sortFilterIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </button>
+                            <div id="sortDropdown" class="dropdown-menu hidden animate-slide-down">
+                                <div class="dropdown-item" onclick="selectSortFilter('newest')">Newest First</div>
+                                <div class="dropdown-item" onclick="selectSortFilter('oldest')">Oldest First</div>
+                                <div class="dropdown-item" onclick="selectSortFilter('deadline')">Deadline</div>
+                                <div class="dropdown-item" onclick="selectSortFilter('status')">Status</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Member Tiles -->
+                    <div id="memberTiles" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                        <div class="member-tile active" onclick="selectMemberTile('all')">
+                            <div class="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+                                <svg class="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 0010 16a5.986 5.986 0 004.546-2.084A5 5 0 0010 11z" clip-rule="evenodd"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="font-medium text-sm">All</div>
+                                <div class="text-xs text-gray-500" id="allCount">0 works</div>
+                            </div>
+                        </div>
+                        <div class="member-tile" onclick="selectMemberTile('Irshad')">
+                            <img src="irshad.jpg" alt="Irshad" class="w-10 h-10 rounded-full object-cover">
+                            <div>
+                                <div class="font-medium text-sm">Irshad</div>
+                                <div class="text-xs text-gray-500" id="irshadCount">0 works</div>
+                            </div>
+                        </div>
+                        <div class="member-tile" onclick="selectMemberTile('Niyas')">
+                            <img src="niyas.jpg" alt="Niyas" class="w-10 h-10 rounded-full object-cover">
+                            <div>
+                                <div class="font-medium text-sm">Niyas</div>
+                                <div class="text-xs text-gray-500" id="niyasCount">0 works</div>
+                            </div>
+                        </div>
+                        <div class="member-tile" onclick="selectMemberTile('Muhammed')">
+                            <img src="muhammed.jpg" alt="Muhammed" class="w-10 h-10 rounded-full object-cover">
+                            <div>
+                                <div class="font-medium text-sm">Muhammed</div>
+                                <div class="text-xs text-gray-500" id="muhammedCount">0 works</div>
+                            </div>
+                        </div>
+                        <div class="member-tile" onclick="selectMemberTile('Najil')">
+                            <img src="najil.jpg" alt="Najil" class="w-10 h-10 rounded-full object-cover">
+                            <div>
+                                <div class="font-medium text-sm">Najil</div>
+                                <div class="text-xs text-gray-500" id="najilCount">0 works</div>
+                            </div>
+                        </div>
+                        <div class="member-tile" onclick="selectMemberTile('Safvan')">
+                            <img src="safvan.jpg" alt="Safvan" class="w-10 h-10 rounded-full object-cover">
+                            <div>
+                                <div class="font-medium text-sm">Safvan</div>
+                                <div class="text-xs text-gray-500" id="safvanCount">0 works</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Works List -->
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-gray-50 border-b border-gray-200">
+                                <tr>
+                                    <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Work Details</th>
+                                    <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                    <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deadline</th>
+                                    <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created by</th>
+                                    <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">WhatsApp</th>
+                                    <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="worksTableBody" class="bg-white divide-y divide-gray-200">
+                                <!-- Works will be inserted here -->
+                            </tbody>
+                        </table>
+                        
+                        <!-- Empty State -->
+                        <div id="noWorks" class="hidden text-center py-12">
+                            <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                            </svg>
+                            <p class="text-gray-500 text-lg mb-2">No works match your current filter criteria</p>
+                            <p class="text-gray-400">Try adjusting your filters or add a new work</p>
+                        </div>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Works Tab -->
-            <div id="works" class="tab-content hidden">
-                <!-- Advanced Filters -->
-                <div class="bg-white rounded-xl shadow-lg p-4 sm:p-6 mb-6 card-shadow">
-                    <div class="flex items-center space-x-2 mb-4">
-                        <svg class="w-5 h-5 text-gray-600"><use href="#filter-icon"/></svg>
-                        <h2 class="text-lg sm:text-xl font-bold text-gray-900">Filter Works</h2>
-                    </div>
+        <!-- Add Work Tab -->
+        <div id="addContent" class="tab-content hidden">
+            <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <div class="bg-white rounded-2xl p-8 shadow-sm border border-gray-200">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-6">Add New Work</h2>
                     
-                    <!-- Member Filters -->
-                    <div class="mb-4">
-                        <h3 class="text-sm font-medium text-gray-700 mb-2">Filter by Member:</h3>
-                        <div class="flex flex-wrap gap-2" id="memberFilters">
-                            <button data-member="all" class="member-filter-btn member-filter-active px-3 py-2 rounded-lg font-medium text-sm flex items-center space-x-2">
-                                <svg class="w-4 h-4"><use href="#user-icon"/></svg>
-                                <span>All Members</span>
-                            </button>
-                            <button data-member="Irshad" class="member-filter-btn member-filter-inactive px-3 py-2 rounded-lg font-medium text-sm flex items-center space-x-2">
-                                <img src="irshad.jpg" alt="Irshad" class="w-4 h-4 rounded-full">
-                                <span>Irshad</span>
-                            </button>
-                            <button data-member="Niyas" class="member-filter-btn member-filter-inactive px-3 py-2 rounded-lg font-medium text-sm flex items-center space-x-2">
-                                <img src="niyas.jpg" alt="Niyas" class="w-4 h-4 rounded-full">
-                                <span>Niyas</span>
-                            </button>
-                            <button data-member="Muhammed" class="member-filter-btn member-filter-inactive px-3 py-2 rounded-lg font-medium text-sm flex items-center space-x-2">
-                                <img src="muhammed.jpg" alt="Muhammed" class="w-4 h-4 rounded-full">
-                                <span>Muhammed</span>
-                            </button>
-                            <button data-member="Najil" class="member-filter-btn member-filter-inactive px-3 py-2 rounded-lg font-medium text-sm flex items-center space-x-2">
-                                <img src="najil.jpg" alt="Najil" class="w-4 h-4 rounded-full">
-                                <span>Najil</span>
-                            </button>
-                            <button data-member="Safvan" class="member-filter-btn member-filter-inactive px-3 py-2 rounded-lg font-medium text-sm flex items-center space-x-2">
-                                <img src="safvan.jpg" alt="Safvan" class="w-4 h-4 rounded-full">
-                                <span>Safvan</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Status & Date Filters -->
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <form id="workForm" class="space-y-6">
                         <div>
-                            <h3 class="text-sm font-medium text-gray-700 mb-2">Filter by Status:</h3>
-                            <select id="statusFilter" onchange="applyFilters()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                                <option value="all">All Status</option>
-                                <option value="pending">Pending</option>
-                                <option value="in-progress">In Progress</option>
-                                <option value="completed">Completed</option>
-                            </select>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Work Name <span class="text-red-500">*</span></label>
+                            <input type="text" id="workName" required class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Enter work name">
                         </div>
                         
                         <div>
-                            <h3 class="text-sm font-medium text-gray-700 mb-2">Filter by Deadline:</h3>
-                            <select id="deadlineFilter" onchange="applyFilters()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                                <option value="all">All Deadlines</option>
-                                <option value="today">Due Today</option>
-                                <option value="tomorrow">Due Tomorrow</option>
-                                <option value="this-week">This Week</option>
-                                <option value="overdue">Overdue</option>
-                            </select>
-                        </div>
-                        
-                        <div>
-                            <h3 class="text-sm font-medium text-gray-700 mb-2">Created by:</h3>
-                            <select id="creatorFilter" onchange="applyFilters()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                                <option value="all">All Creators</option>
-                                <option value="Irshad">Irshad</option>
-                                <option value="Niyas">Niyas</option>
-                                <option value="Muhammed">Muhammed</option>
-                                <option value="Najil">Najil</option>
-                                <option value="Safvan">Safvan</option>
-                            </select>
-                        </div>
-                        
-                        <div>
-                            <h3 class="text-sm font-medium text-gray-700 mb-2">Sort by:</h3>
-                            <select id="sortFilter" onchange="applyFilters()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                                <option value="newest">Newest First</option>
-                                <option value="oldest">Oldest First</option>
-                                <option value="deadline">Deadline</option>
-                                <option value="status">Status</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="worksList" class="space-y-4">
-                    <!-- Works will be populated here -->
-                </div>
-            </div>
-
-            <!-- Add/Edit Work Tab -->
-            <div id="add-work" class="tab-content hidden">
-                <div class="bg-white rounded-xl shadow-lg p-4 sm:p-6 card-shadow">
-                    <h2 id="workFormTitle" class="text-lg sm:text-xl font-bold text-gray-900 mb-6">Add New Work</h2>
-                    
-                    <form onsubmit="submitWork(event)" class="space-y-6">
-                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Work Name *</label>
-                                <input type="text" id="workName" required class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                            </div>
-                            
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">WhatsApp Number</label>
-                                <input type="tel" id="whatsappNumber" class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="+91 9876543210">
-                            </div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">WhatsApp Number</label>
+                            <input type="tel" id="whatsappNumber" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Enter WhatsApp number">
                         </div>
                         
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                            <textarea id="workDescription" rows="4" class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
+                            <textarea id="workDescription" rows="4" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Enter work description"></textarea>
                         </div>
                         
-                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Assign to Staff *</label>
-                                <select id="assignedStaff" required class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                                    <option value="">Select Staff Member</option>
-                                    <option value="Irshad">Irshad</option>
-                                    <option value="Niyas">Niyas</option>
-                                    <option value="Muhammed">Muhammed</option>
-                                    <option value="Najil">Najil</option>
-                                    <option value="Safvan">Safvan</option>
-                                </select>
+                        <!-- Custom Assign Staff Dropdown -->
+                        <div class="custom-dropdown">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Assign to Staff <span class="text-red-500">*</span></label>
+                            <button type="button" id="assignStaffButton" onclick="toggleAssignStaffDropdown()" class="dropdown-button">
+                                <span id="assignStaffText">Select Staff Member</span>
+                                <svg class="w-5 h-5 text-gray-400 transition-transform" id="assignStaffIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </button>
+                            <div id="assignStaffDropdown" class="dropdown-menu hidden animate-slide-down">
+                                <div class="dropdown-item" onclick="selectAssignStaff('Irshad')">Irshad</div>
+                                <div class="dropdown-item" onclick="selectAssignStaff('Niyas')">Niyas</div>
+                                <div class="dropdown-item" onclick="selectAssignStaff('Muhammed')">Muhammed</div>
+                                <div class="dropdown-item" onclick="selectAssignStaff('Najil')">Najil</div>
+                                <div class="dropdown-item" onclick="selectAssignStaff('Safvan')">Safvan</div>
                             </div>
-                            
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Deadline</label>
-                                <input type="date" id="workDeadline" class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                            </div>
-                            
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Priority</label>
-                                <select id="workPriority" class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                                    <option value="medium">Medium</option>
-                                    <option value="low">Low</option>
-                                    <option value="high">High</option>
-                                </select>
-                            </div>
+                            <input type="hidden" id="assignStaff" required>
                         </div>
                         
-                        <div class="flex flex-col sm:flex-row justify-end space-y-3 sm:space-y-0 sm:space-x-4">
-                            <button type="button" onclick="cancelEdit()" class="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors order-2 sm:order-1">
-                                Cancel
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Deadline</label>
+                            <input type="date" id="workDeadline" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        </div>
+                        
+                        <!-- Custom Priority Dropdown -->
+                        <div class="custom-dropdown">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+                            <button type="button" id="priorityButton" onclick="togglePriorityDropdown()" class="dropdown-button">
+                                <span id="priorityText">Medium</span>
+                                <svg class="w-5 h-5 text-gray-400 transition-transform" id="priorityIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
                             </button>
-                            <button type="submit" id="submitBtn" class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors order-1 sm:order-2 flex items-center space-x-2">
-                                <svg class="w-4 h-4"><use href="#add-icon"/></svg>
-                                <span>Add Work</span>
-                            </button>
+                            <div id="priorityDropdown" class="dropdown-menu hidden animate-slide-down">
+                                <div class="dropdown-item" onclick="selectPriority('Low')">Low</div>
+                                <div class="dropdown-item" onclick="selectPriority('Medium')">Medium</div>
+                                <div class="dropdown-item" onclick="selectPriority('High')">High</div>
+                            </div>
+                            <input type="hidden" id="workPriority" value="Medium">
+                        </div>
+                        
+                        <div class="flex gap-4">
+                            <button type="button" onclick="resetForm()" class="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200">Cancel</button>
+                            <button type="submit" class="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:from-primary/90 hover:to-secondary/90 transition-all duration-300">Add Work</button>
                         </div>
                     </form>
-                </div>
-            </div>
-        </main>
-    </div>
-
-    <!-- Work Details Modal -->
-    <div id="workModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div class="p-4 sm:p-6 border-b border-gray-200">
-                <div class="flex justify-between items-start">
-                    <div class="flex items-start space-x-3 flex-1">
-                        <img id="modalAssignedAvatar" src="" alt="Assigned" class="avatar-lg">
-                        <div>
-                            <h3 id="modalWorkName" class="text-lg sm:text-xl font-bold text-gray-900 mb-1"></h3>
-                            <div id="modalPriorityBadge" class="inline-block px-2 py-1 rounded text-xs font-medium"></div>
-                        </div>
-                    </div>
-                    <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 text-2xl flex-shrink-0 ml-4">&times;</button>
-                </div>
-            </div>
-            
-            <div class="p-4 sm:p-6">
-                <div class="space-y-4">
-                    <div id="statusUpdateSection">
-                        <label class="block text-sm font-medium text-gray-700">Status</label>
-                        <select id="modalStatus" onchange="updateWorkStatus()" class="mt-1 block w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500">
-                            <option value="pending">Pending</option>
-                            <option value="in-progress">In Progress</option>
-                            <option value="completed">Completed</option>
-                        </select>
-                    </div>
-                    
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Description</label>
-                        <p id="modalDescription" class="mt-1 text-gray-900 bg-gray-50 p-3 rounded-lg text-sm"></p>
-                    </div>
-                    
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Assigned to</label>
-                            <div class="flex items-center space-x-2 mt-1">
-                                <img id="modalAssignedAvatarSmall" src="" alt="Assigned" class="w-6 h-6 rounded-full">
-                                <p id="modalAssigned" class="text-gray-900 font-medium"></p>
-                            </div>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Deadline</label>
-                            <div class="flex items-center space-x-2 mt-1">
-                                <svg class="w-4 h-4 text-gray-500"><use href="#calendar-icon"/></svg>
-                                <p id="modalDeadline" class="text-gray-900"></p>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Created by</label>
-                            <div class="flex items-center space-x-2 mt-1">
-                                <img id="modalCreatorAvatar" src="" alt="Creator" class="w-6 h-6 rounded-full">
-                                <p id="modalCreatedBy" class="text-gray-900 font-medium"></p>
-                            </div>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Created on</label>
-                            <p id="modalCreatedAt" class="mt-1 text-gray-900"></p>
-                        </div>
-                    </div>
-                    
-                    <div id="modalWhatsapp" class="hidden">
-                        <label class="block text-sm font-medium text-gray-700">WhatsApp Number</label>
-                        <div class="mt-1 flex">
-                            <input type="text" id="modalWhatsappNumber" readonly class="flex-1 border border-gray-300 rounded-l-lg px-3 py-2 bg-gray-50 text-sm">
-                            <button onclick="copyWhatsApp()" class="bg-green-500 text-white px-4 py-2 rounded-r-lg hover:bg-green-600 transition-colors text-sm flex items-center space-x-1">
-                                <svg class="w-4 h-4"><use href="#copy-icon"/></svg>
-                                <span>Copy</span>
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div id="workActions" class="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-200">
-                        <button id="editWorkBtn" onclick="editWork()" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center space-x-2">
-                            <svg class="w-4 h-4"><use href="#edit-icon"/></svg>
-                            <span>Edit Work</span>
-                        </button>
-                        <button id="deleteWorkBtn" onclick="deleteWork()" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors text-sm flex items-center space-x-2">
-                            <svg class="w-4 h-4"><use href="#delete-icon"/></svg>
-                            <span>Delete Work</span>
-                        </button>
-                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Toast Container for notifications -->
-    <div id="toastContainer" style="position: fixed; bottom: 2rem; right: 2rem; z-index: 99999; display: flex; flex-direction: column; gap: 10px; align-items: flex-end;">
-        <!-- Toasts will appear here -->
+    <!-- Work Details Modal -->
+    <div id="workDetailsModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl p-8 w-full max-w-2xl max-h-90vh overflow-y-auto animate-scale-in">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800">Work Details</h2>
+                <button onclick="closeWorkDetailsModal()" class="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-full transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            
+            <div id="workDetailsContent" class="space-y-6">
+                <!-- Work details will be populated here -->
+            </div>
+        </div>
     </div>
+
+    <!-- Edit Work Modal -->
+    <div id="editWorkModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl p-8 w-full max-w-2xl max-h-90vh overflow-y-auto animate-scale-in">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800">Edit Work</h2>
+                <button onclick="closeEditModal()" class="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-full transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            
+            <form id="editWorkForm" class="space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Work Name <span class="text-red-500">*</span></label>
+                    <input type="text" id="editWorkName" required class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">WhatsApp Number</label>
+                    <input type="tel" id="editWhatsappNumber" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                    <textarea id="editWorkDescription" rows="4" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"></textarea>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Assign to Staff <span class="text-red-500">*</span></label>
+                    <select id="editAssignStaff" required class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="Irshad">Irshad</option>
+                        <option value="Niyas">Niyas</option>
+                        <option value="Muhammed">Muhammed</option>
+                        <option value="Najil">Najil</option>
+                        <option value="Safvan">Safvan</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                    <select id="editWorkStatus" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="Pending">Pending</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Completed">Completed</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Deadline</label>
+                    <input type="date" id="editWorkDeadline" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+                    <select id="editWorkPriority" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="Low">Low</option>
+                        <option value="Medium">Medium</option>
+                        <option value="High">High</option>
+                    </select>
+                </div>
+                
+                <div class="flex gap-4">
+                    <button type="button" onclick="closeEditModal()" class="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200">Cancel</button>
+                    <button type="submit" class="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:from-primary/90 hover:to-secondary/90 transition-all duration-300">Update Work</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="fixed top-4 right-4 z-50 space-y-2"></div>
 
     <script src="app.js"></script>
 </body>
