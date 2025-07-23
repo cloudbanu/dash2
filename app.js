@@ -22,6 +22,7 @@ let categories = [];
 let currentWorkId = null;
 let editingWorkId = null;
 let deleteWorkId = null;
+let showCompletedWorks = false; // New flag to control completed works visibility
 let currentFilters = {
     member: 'all',
     status: 'all', 
@@ -71,11 +72,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         setupMemberFilters();
         subscribeToWorks();
         subscribeToNotifications();
-        
-        // Set default member filter based on role
-        if (currentUserRole !== 'Administrator') {
-            setDefaultMemberFilter(savedUser);
-        }
         
         renderWorks();
         updateStats();
@@ -553,17 +549,11 @@ function setupFormHandlers() {
     setTimeout(trackChanges, 100);
 }
 
-// == DEFAULT FILTERING ==
-function setDefaultMemberFilter(username) {
-    currentFilters.member = username;
-    selectMemberTile(username);
-}
-
 // == DROPDOWN MANAGEMENT ==
 function setupDropdownHandlers() {
     // Close dropdowns when clicking outside
     document.addEventListener('click', function(event) {
-        if (!event.target.closest('.custom-dropdown')) {
+        if (!event.target.closest('.custom-dropdown') && !event.target.closest('.status-dropdown')) {
             closeAllDropdowns();
         }
     });
@@ -590,6 +580,11 @@ function closeAllDropdowns() {
         if (iconEl) {
             iconEl.style.transform = 'rotate(0deg)';
         }
+    });
+
+    // Close all status dropdowns
+    document.querySelectorAll('.status-dropdown-menu').forEach(dropdown => {
+        dropdown.remove();
     });
 }
 
@@ -729,8 +724,9 @@ function cancelAddWork() {
 
 // == CLEAR FILTERS ==
 function clearAllFilters() {
+    showCompletedWorks = false; // Reset completed works flag
     currentFilters = {
-        member: currentUserRole === 'Administrator' ? 'all' : currentUser,
+        member: 'all', // Allow all staff to see all works
         status: 'all',
         deadline: 'all',
         creator: 'all',
@@ -745,11 +741,7 @@ function clearAllFilters() {
     document.getElementById('sortFilterText').textContent = 'Overdue & Pending First';
     
     // Update member tile selection
-    if (currentUserRole === 'Administrator') {
-        selectMemberTile('all');
-    } else {
-        selectMemberTile(currentUser);
-    }
+    selectMemberTile('all');
     
     closeAllDropdowns();
     renderWorks();
@@ -780,14 +772,16 @@ function selectMemberTile(member) {
 }
 
 function updateMemberTiles() {
-    // Count works for each member
+    // Count works for each member (excluding completed works unless specifically showing them)
+    const worksToCount = showCompletedWorks ? works : works.filter(w => w.status !== 'Completed');
+    
     const counts = {
-        all: works.length,
-        Irshad: works.filter(w => w.assigned_staff === 'Irshad').length,
-        Niyas: works.filter(w => w.assigned_staff === 'Niyas').length,
-        Muhammed: works.filter(w => w.assigned_staff === 'Muhammed').length,
-        Najil: works.filter(w => w.assigned_staff === 'Najil').length,
-        Safvan: works.filter(w => w.assigned_staff === 'Safvan').length
+        all: worksToCount.length,
+        Irshad: worksToCount.filter(w => w.assigned_staff === 'Irshad').length,
+        Niyas: worksToCount.filter(w => w.assigned_staff === 'Niyas').length,
+        Muhammed: worksToCount.filter(w => w.assigned_staff === 'Muhammed').length,
+        Najil: worksToCount.filter(w => w.assigned_staff === 'Najil').length,
+        Safvan: worksToCount.filter(w => w.assigned_staff === 'Safvan').length
     };
     
     // Update count displays - check if elements exist
@@ -812,12 +806,17 @@ function updateMemberTiles() {
 function goToWorksWithFilter(filterType) {
     showTab('works');
     
-    if (filterType === 'Pending' || filterType === 'Completed') {
-        selectStatusFilter(filterType);
+    if (filterType === 'Pending') {
+        showCompletedWorks = false;
+        selectStatusFilter('Pending');
+    } else if (filterType === 'Completed') {
+        showCompletedWorks = true; // Show completed works only when clicking completed tile
+        selectStatusFilter('Completed');
     } else if (filterType === 'today') {
+        showCompletedWorks = false;
         selectDeadlineFilter('today');
     } else if (filterType === 'all') {
-        // For total works tile - show all works
+        showCompletedWorks = false; // Don't show completed works in "all works"
         selectStatusFilter('all');
     }
 }
@@ -928,11 +927,6 @@ function loginUser(name, role) {
         subscribeToWorks();
         subscribeToNotifications();
         
-        // Set default member filter based on role
-        if (currentUserRole !== 'Administrator') {
-            setDefaultMemberFilter(name);
-        }
-        
         renderWorks();
         updateStats();
         updateMemberTiles();
@@ -952,6 +946,7 @@ function executeLogout() {
     currentUserRole = null;
     works = [];
     categories = [];
+    showCompletedWorks = false;
     
     // Reset UI
     document.getElementById('mainApp').classList.add('hidden');
@@ -966,16 +961,7 @@ function executeLogout() {
 
 // == SETUP MEMBER FILTERS ==
 function setupMemberFilters() {
-    if (currentUserRole !== 'Administrator') {
-        // Hide other member tiles for non-admin users
-        const memberTiles = document.querySelectorAll('.member-tile');
-        memberTiles.forEach(tile => {
-            const tileText = tile.textContent;
-            if (!tileText.includes('All') && !tileText.includes(currentUser)) {
-                tile.style.display = 'none';
-            }
-        });
-    }
+    // All staff can now see all members' works - no restrictions
 }
 
 // == REAL-TIME SUBSCRIPTIONS ==
@@ -1048,6 +1034,11 @@ async function refreshWorks() {
 
 function filterWorks() {
     let filteredWorks = [...works];
+    
+    // Filter out completed works unless specifically showing them
+    if (!showCompletedWorks) {
+        filteredWorks = filteredWorks.filter(work => work.status !== 'Completed');
+    }
     
     // Filter by member
     if (currentFilters.member !== 'all') {
@@ -1186,32 +1177,36 @@ function createWorkCard(work) {
         'Completed': 'bg-green-100 text-green-800'
     };
     
+    // Enhanced overdue indicator
+    const overdueIndicator = isOverdueWork ? `
+        <div class="absolute -top-1 -right-1 z-10">
+            <div class="relative">
+                <div class="w-4 h-4 bg-red-500 rounded-full animate-pulse"></div>
+                <div class="absolute inset-0 w-4 h-4 bg-red-500 rounded-full animate-ping"></div>
+            </div>
+        </div>
+        <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 to-red-600 rounded-t-lg animate-pulse"></div>
+    ` : '';
+    
     return `
-        <div class="work-card p-6 animate-fade-in" onclick="showWorkDetails(${work.id})">
-            ${isOverdueWork ? '<div class="absolute top-2 right-2 w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>' : ''}
+        <div class="work-card p-6 animate-fade-in relative ${isOverdueWork ? 'ring-2 ring-red-200 bg-red-50' : ''}" onclick="showWorkDetails(${work.id})">
+            ${overdueIndicator}
             
             <div class="flex justify-between items-start mb-4">
                 <div class="flex-1">
-                    <h3 class="font-semibold text-gray-800 text-lg mb-1 line-clamp-2">${work.work_name}</h3>
+                    <h3 class="font-semibold text-gray-800 text-lg mb-1 line-clamp-2 ${isOverdueWork ? 'text-red-800' : ''}">${work.work_name}</h3>
                     <p class="text-sm text-gray-600 mb-2">${work.category || 'No Category'}</p>
                 </div>
                 <div class="status-dropdown">
                     <button class="status-button ${statusColors[work.status] || 'bg-gray-100 text-gray-800'}" 
-                            onclick="event.stopPropagation(); changeWorkStatus(${work.id}, '${work.status}', this)">
+                            onclick="event.stopPropagation(); showStatusDropdown(${work.id}, '${work.status}', this)">
                         ${work.status}
+                        <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
                     </button>
                 </div>
             </div>
-            
-            ${work.description ? `<p class="text-gray-600 text-sm mb-4 line-clamp-3">${work.description}</p>` : ''}
-            
-            <!-- Pricing Information -->
-            ${work.mrp || work.quotation_rate ? `
-                <div class="flex gap-4 mb-4 text-sm">
-                    ${work.mrp ? `<div class="text-gray-600">MRP: <span class="font-medium text-gray-800">₹${work.mrp}</span></div>` : ''}
-                    ${work.quotation_rate ? `<div class="text-gray-600">Quote: <span class="font-medium text-gray-800">₹${work.quotation_rate}</span></div>` : ''}
-                </div>
-            ` : ''}
             
             <div class="flex items-center justify-between mb-4">
                 <div class="flex items-center gap-2">
@@ -1225,11 +1220,12 @@ function createWorkCard(work) {
             
             <div class="flex items-center justify-between text-sm text-gray-500">
                 <div class="flex items-center gap-4">
-                    <div class="flex items-center gap-1">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div class="flex items-center gap-1 ${isOverdueWork ? 'text-red-600 font-medium' : ''}">
+                        <svg class="w-4 h-4 ${isOverdueWork ? 'text-red-500' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                         </svg>
                         ${deadlineText}
+                        ${isOverdueWork ? '<span class="text-red-500 font-bold">⚠️</span>' : ''}
                     </div>
                     ${work.whatsapp_number ? `
                         <button onclick="event.stopPropagation(); copyToClipboard('${work.whatsapp_number}')" 
@@ -1246,8 +1242,7 @@ function createWorkCard(work) {
                 </div>
             </div>
             
-            <div class="flex justify-between items-center mt-4 pt-4 border-t border-gray-100">
-                <span class="text-xs text-gray-500">By ${work.created_by}</span>
+            <div class="flex justify-end items-center mt-4 pt-4 border-t border-gray-100">
                 <div class="flex gap-2">
                     <button onclick="event.stopPropagation(); editWork(${work.id})" 
                             class="p-2 text-gray-400 hover:text-blue-600 transition-colors">
@@ -1267,28 +1262,65 @@ function createWorkCard(work) {
     `;
 }
 
-// == WORK ACTIONS ==
-async function changeWorkStatus(workId, currentStatus, buttonElement) {
-    const statusOptions = ['Pending', 'In Progress', 'Completed'];
-    const currentIndex = statusOptions.indexOf(currentStatus);
-    const nextStatus = statusOptions[(currentIndex + 1) % statusOptions.length];
+// == STATUS DROPDOWN FUNCTION ==
+function showStatusDropdown(workId, currentStatus, buttonElement) {
+    // Close any existing status dropdowns
+    document.querySelectorAll('.status-dropdown-menu').forEach(dropdown => {
+        dropdown.remove();
+    });
     
+    const statusOptions = [
+        { value: 'Pending', color: 'bg-orange-100 text-orange-800', icon: '⏳' },
+        { value: 'In Progress', color: 'bg-blue-100 text-blue-800', icon: '🔄' },
+        { value: 'Completed', color: 'bg-green-100 text-green-800', icon: '✅' }
+    ];
+    
+    const dropdown = document.createElement('div');
+    dropdown.className = 'status-dropdown-menu absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-32';
+    
+    dropdown.innerHTML = statusOptions.map(option => `
+        <button onclick="changeWorkStatus(${workId}, '${option.value}'); this.parentElement.remove();" 
+                class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors flex items-center gap-2 ${option.value === currentStatus ? 'bg-gray-100 font-medium' : ''}">
+            <span>${option.icon}</span>
+            <span class="px-2 py-1 rounded-full text-xs ${option.color}">${option.value}</span>
+        </button>
+    `).join('');
+    
+    // Position dropdown relative to button
+    const rect = buttonElement.getBoundingClientRect();
+    const container = buttonElement.closest('.status-dropdown');
+    container.style.position = 'relative';
+    container.appendChild(dropdown);
+    
+    // Close dropdown when clicking outside
+    setTimeout(() => {
+        document.addEventListener('click', function closeDropdown(e) {
+            if (!dropdown.contains(e.target) && e.target !== buttonElement) {
+                dropdown.remove();
+                document.removeEventListener('click', closeDropdown);
+            }
+        });
+    }, 100);
+}
+
+// == WORK ACTIONS ==
+async function changeWorkStatus(workId, newStatus) {
     try {
         const { error } = await supabase
             .from('works')
-            .update({ status: nextStatus })
+            .update({ status: newStatus })
             .eq('id', workId);
         
         if (error) throw error;
         
         await refreshWorks();
-        showToast(`✅ Status updated to ${nextStatus}`, 'success');
+        showToast(`✅ Status updated to ${newStatus}`, 'success');
         
         // Show browser notification
         const work = works.find(w => w.id === workId);
         if (work) {
             showBrowserNotification('🔄 Status Updated', {
-                body: `"${work.work_name}" is now ${nextStatus}`,
+                body: `"${work.work_name}" is now ${newStatus}`,
                 tag: 'status-change'
             });
         }
@@ -1308,7 +1340,7 @@ function showWorkDetails(workId) {
     
     const priorityColors = {
         'High': 'bg-red-100 text-red-800',
-        'Medium': 'bg-yellow-100 text-yellow-800',
+        'Medium': 'bg-yellow-100 text-yellow-800',  
         'Low': 'bg-green-100 text-green-800'
     };
     
@@ -1327,7 +1359,7 @@ function showWorkDetails(workId) {
             <div class="border-b border-gray-200 pb-4">
                 <div class="flex justify-between items-start mb-2">
                     <h3 class="text-xl font-bold text-gray-800">${work.work_name}</h3>
-                    ${isOverdueWork ? '<span class="px-2 py-1 bg-red-100 text-red-800 text-xs font-medium rounded-full">Overdue</span>' : ''}
+                    ${isOverdueWork ? '<span class="px-2 py-1 bg-red-100 text-red-800 text-xs font-medium rounded-full animate-pulse">⚠️ Overdue</span>' : ''}
                 </div>
                 <div class="flex items-center gap-2 mb-2">
                     <span class="px-3 py-1 rounded-full text-sm font-medium ${statusColors[work.status]}">${work.status}</span>
@@ -1394,12 +1426,12 @@ function showWorkDetails(workId) {
             ${work.deadline ? `
                 <div>
                     <h4 class="font-semibold text-gray-800 mb-2">Deadline</h4>
-                    <div class="flex items-center gap-2 bg-gray-50 p-3 rounded-lg">
-                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div class="flex items-center gap-2 bg-gray-50 p-3 rounded-lg ${isOverdueWork ? 'bg-red-50' : ''}">
+                        <svg class="w-5 h-5 text-gray-600 ${isOverdueWork ? 'text-red-500' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                         </svg>
-                        <span class="text-gray-800 font-medium">${deadlineText}</span>
-                        ${isOverdueWork ? '<span class="text-red-600 text-sm">(Overdue)</span>' : ''}
+                        <span class="text-gray-800 font-medium ${isOverdueWork ? 'text-red-800' : ''}">${deadlineText}</span>
+                        ${isOverdueWork ? '<span class="text-red-600 text-sm font-bold">(⚠️ Overdue)</span>' : ''}
                     </div>
                 </div>
             ` : ''}
@@ -1681,6 +1713,11 @@ function resetForm() {
 
 // == TAB MANAGEMENT ==
 function showTab(tabName) {
+    // Reset completed works flag when switching tabs (except when going to dashboard)
+    if (tabName !== 'dashboard') {
+        showCompletedWorks = false;
+    }
+    
     // Update navigation tabs
     document.querySelectorAll('.nav-tab').forEach(tab => {
         tab.classList.remove('bg-primary', 'text-white');
@@ -1720,6 +1757,7 @@ window.showWorkDetails = showWorkDetails;
 window.editWork = editWork;
 window.executeDeleteWork = executeDeleteWork;
 window.changeWorkStatus = changeWorkStatus;
+window.showStatusDropdown = showStatusDropdown;
 window.copyToClipboard = copyToClipboard;
 window.toggleNotifications = toggleNotifications;
 window.showLogoutConfirmation = showLogoutConfirmation;
