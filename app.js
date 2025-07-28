@@ -22,7 +22,8 @@ let categories = [];
 let currentWorkId = null;
 let editingWorkId = null;
 let deleteWorkId = null;
-let showCompletedWorks = false; // New flag to control completed works visibility
+let showCompletedWorks = false;
+let statusUpdateInProgress = new Set();
 let currentFilters = {
     member: 'all',
     status: 'all', 
@@ -34,6 +35,23 @@ let currentFilters = {
 let notificationsEnabled = false;
 let hasUnsavedChanges = false;
 let pendingModalClose = null;
+
+// Notes and Todos functionality (user-specific)
+let notesAutoSaveTimeout = null;
+let currentNotes = '';
+let lastSavedNotes = '';
+let isSavingNotes = false;
+
+let todoAutoSaveTimeout = null;
+let todoItems = [];
+let isSavingTodos = false;
+
+// Image upload variables
+let uploadedImages = [];
+let editUploadedImages = [];
+
+// Global variable to store current work images for editing
+let currentWorkImages = [];
 
 // == INITIALIZATION ==
 document.addEventListener('DOMContentLoaded', async function() {
@@ -51,6 +69,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Set up keyboard event listeners
     setupKeyboardEventListeners();
     
+    // Set up drag and drop for image upload
+    setupImageUpload();
+    
     // Check if user was previously logged in
     const savedUser = localStorage.getItem('currentUser');
     const savedRole = localStorage.getItem('currentUserRole');
@@ -61,17 +82,22 @@ document.addEventListener('DOMContentLoaded', async function() {
         document.getElementById('loginScreen').classList.add('hidden');
         document.getElementById('mainApp').classList.remove('hidden');
         document.getElementById('userName').textContent = savedUser;
+        document.getElementById('profileUserName').textContent = savedUser;
         document.getElementById('userAvatar').src = memberAvatars[savedUser];
         
         // Initialize app data
         await Promise.all([
             refreshWorks(),
-            refreshCategories()
+            refreshCategories(),
+            loadNotes(),
+            loadTodos()
         ]);
         
         setupMemberFilters();
         subscribeToWorks();
         subscribeToNotifications();
+        subscribeToNotes();
+        subscribeToTodos();
         
         renderWorks();
         updateStats();
@@ -86,6 +112,668 @@ document.addEventListener('DOMContentLoaded', async function() {
     setupFormHandlers();
 });
 
+// == PROFILE DROPDOWN ==
+function toggleProfileDropdown() {
+    const dropdown = document.getElementById('profileDropdownMenu');
+    if (dropdown.classList.contains('hidden')) {
+        dropdown.classList.remove('hidden');
+        // Close dropdown when clicking outside
+        setTimeout(() => {
+            document.addEventListener('click', closeProfileDropdown);
+        }, 100);
+    } else {
+        dropdown.classList.add('hidden');
+    }
+}
+
+function closeProfileDropdown(event) {
+    const dropdown = document.getElementById('profileDropdownMenu');
+    const profileArea = event.target.closest('.profile-dropdown');
+    
+    if (!profileArea) {
+        dropdown.classList.add('hidden');
+        document.removeEventListener('click', closeProfileDropdown);
+    }
+}
+
+// == IMAGE UPLOAD FUNCTIONALITY ==
+function setupImageUpload() {
+    const uploadArea = document.getElementById('imageUploadArea');
+    const editUploadArea = document.getElementById('editImageUploadArea');
+    
+    if (uploadArea) {
+        uploadArea.addEventListener('dragover', handleDragOver);
+        uploadArea.addEventListener('dragleave', handleDragLeave);
+        uploadArea.addEventListener('drop', handleDrop);
+    }
+    
+    if (editUploadArea) {
+        editUploadArea.addEventListener('dragover', handleDragOver);
+        editUploadArea.addEventListener('dragleave', handleDragLeave);
+        editUploadArea.addEventListener('drop', handleEditDrop);
+    }
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+    e.currentTarget.classList.add('dragover');
+}
+
+function handleDragLeave(e) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('dragover');
+}
+
+function handleDrop(e) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('dragover');
+    const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
+    processImages(files, false);
+}
+
+function handleEditDrop(e) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('dragover');
+    const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
+    processImages(files, true);
+}
+
+function handleImageUpload(event) {
+    const files = Array.from(event.target.files);
+    processImages(files, false);
+}
+
+function handleEditImageUpload(event) {
+    const files = Array.from(event.target.files);
+    processImages(files, true);
+}
+
+async function processImages(files, isEdit = false) {
+    if (files.length === 0) return;
+    
+    const progressContainer = document.getElementById('uploadProgress');
+    const progressBar = document.getElementById('uploadProgressBar');
+    
+    if (progressContainer && progressBar) {
+        progressContainer.classList.remove('hidden');
+        progressBar.style.width = '0%';
+    }
+    
+    const totalFiles = files.length;
+    let processedFiles = 0;
+    
+    for (const file of files) {
+        if (file.size > 10 * 1024 * 1024) { // 10MB limit
+            showToast('❌ File too large. Maximum size is 10MB', 'error');
+            continue;
+        }
+        
+        try {
+            // Compress image
+            const compressedFile = await compressImage(file, 0.6);
+            
+            // Upload to Supabase Storage
+            const fileName = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${file.name.split('.').pop()}`;
+            const { data, error } = await supabase.storage
+                .from('work-images')
+                .upload(fileName, compressedFile);
+            
+            if (error) throw error;
+            
+            // Get public URL
+            const { data: { publicUrl } } = supabase.storage
+                .from('work-images')
+                .getPublicUrl(fileName);
+            
+            const imageData = {
+                url: publicUrl,
+                name: file.name,
+                fileName: fileName
+            };
+            
+            if (isEdit) {
+                editUploadedImages.push(imageData);
+                updateEditImagePreview();
+            } else {
+                uploadedImages.push(imageData);
+                updateImagePreview();
+            }
+            
+        } catch (error) {
+            console.error('Error uploading image:', error);
+            showToast('❌ Failed to upload image: ' + file.name, 'error');
+        }
+        
+        processedFiles++;
+        if (progressBar) {
+            progressBar.style.width = `${(processedFiles / totalFiles) * 100}%`;
+        }
+    }
+    
+    if (progressContainer) {
+        setTimeout(() => {
+            progressContainer.classList.add('hidden');
+        }, 1000);
+    }
+    
+    showToast(`✅ ${processedFiles} image(s) uploaded successfully`, 'success');
+}
+
+function compressImage(file, quality) {
+    return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        
+        img.onload = () => {
+            // Calculate new dimensions (max 1920x1080)
+            const maxWidth = 1920;
+            const maxHeight = 1080;
+            let { width, height } = img;
+            
+            if (width > maxWidth) {
+                height = (height * maxWidth) / width;
+                width = maxWidth;
+            }
+            
+            if (height > maxHeight) {
+                width = (width * maxHeight) / height;
+                height = maxHeight;
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
+            
+            // Draw and compress
+            ctx.drawImage(img, 0, 0, width, height);
+            canvas.toBlob(resolve, 'image/jpeg', quality);
+        };
+        
+        img.src = URL.createObjectURL(file);
+    });
+}
+
+function updateImagePreview() {
+    const container = document.getElementById('imagePreviewContainer');
+    if (!container) return;
+    
+    if (uploadedImages.length === 0) {
+        container.classList.add('hidden');
+        return;
+    }
+    
+    container.classList.remove('hidden');
+    container.innerHTML = uploadedImages.map((image, index) => `
+        <div class="image-item">
+            <img src="${image.url}" alt="${image.name}" onclick="viewImage('${image.url}')">
+            <button class="image-remove-btn" onclick="removeImage(${index}, false)">×</button>
+        </div>
+    `).join('');
+}
+
+function updateEditImagePreview() {
+    const container = document.getElementById('editImagePreviewContainer');
+    if (!container) return;
+    
+    // Combine existing images with new uploads
+    const allImages = [...(currentWorkImages || []), ...editUploadedImages];
+    
+    if (allImages.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    container.innerHTML = allImages.map((image, index) => {
+        const isExisting = index < (currentWorkImages?.length || 0);
+        return `
+            <div class="image-item">
+                <img src="${image.url || image}" alt="${image.name || 'Work image'}" onclick="viewImage('${image.url || image}')">
+                <button class="image-remove-btn" onclick="removeImage(${index}, true, ${isExisting})">×</button>
+            </div>
+        `;
+    }).join('');
+}
+
+function removeImage(index, isEdit = false, isExisting = false) {
+    if (isEdit) {
+        if (isExisting) {
+            // Remove from current work images
+            if (currentWorkImages) {
+                currentWorkImages.splice(index, 1);
+            }
+        } else {
+            // Remove from new uploads
+            const newIndex = index - (currentWorkImages?.length || 0);
+            editUploadedImages.splice(newIndex, 1);
+        }
+        updateEditImagePreview();
+    } else {
+        uploadedImages.splice(index, 1);
+        updateImagePreview();
+    }
+}
+
+function viewImage(url) {
+    const modal = document.getElementById('imageViewerModal');
+    const img = document.getElementById('imageViewerImg');
+    if (modal && img) {
+        img.src = url;
+        modal.classList.remove('hidden');
+    }
+}
+
+function closeImageViewer() {
+    const modal = document.getElementById('imageViewerModal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+}
+
+// == NOTES FUNCTIONALITY ==
+async function loadNotes() {
+    try {
+        const { data, error } = await supabase
+            .from('notes')
+            .select('*')
+            .eq('user_name', currentUser)
+            .single();
+        
+        if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+            throw error;
+        }
+        
+        const notesContent = data ? data.content || '' : '';
+        currentNotes = notesContent;
+        lastSavedNotes = notesContent;
+        
+        const textarea = document.getElementById('notesTextarea');
+        if (textarea) {
+            textarea.value = notesContent;
+            updateNotesStats();
+        }
+        
+        if (data && data.updated_at) {
+            updateLastSavedTime(data.updated_at, 'notes');
+        }
+    } catch (error) {
+        console.error('Error loading notes:', error);
+        showToast('❌ Failed to load notes', 'error');
+    }
+}
+
+async function saveNotes() {
+    if (isSavingNotes || currentNotes === lastSavedNotes) return;
+    
+    isSavingNotes = true;
+    showNotesSaveIndicator('saving');
+    
+    try {
+        const { data, error } = await supabase
+            .from('notes')
+            .upsert({
+                user_name: currentUser,
+                content: currentNotes
+            })
+            .select()
+            .single();
+        
+        if (error) throw error;
+        
+        lastSavedNotes = currentNotes;
+        showNotesSaveIndicator('saved');
+        updateLastSavedTime(data.updated_at, 'notes');
+        
+    } catch (error) {
+        console.error('Error saving notes:', error);
+        showNotesSaveIndicator('error');
+        showToast('❌ Failed to save notes', 'error');
+    } finally {
+        isSavingNotes = false;
+    }
+}
+
+function handleNotesInput() {
+    const textarea = document.getElementById('notesTextarea');
+    if (!textarea) return;
+    
+    currentNotes = textarea.value;
+    updateNotesStats();
+    
+    // Clear previous timeout
+    if (notesAutoSaveTimeout) {
+        clearTimeout(notesAutoSaveTimeout);
+    }
+    
+    // Show saving indicator immediately
+    showNotesSaveIndicator('saving');
+    
+    // Set new timeout for auto-save
+    notesAutoSaveTimeout = setTimeout(() => {
+        saveNotes();
+    }, 1000); // Save after 1 second of inactivity
+}
+
+function updateNotesStats() {
+    const textarea = document.getElementById('notesTextarea');
+    if (!textarea) return;
+    
+    const content = textarea.value;
+    const characterCount = content.length;
+    const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
+    const lineCount = content.split('\n').length;
+    
+    // Update counters
+    const charElement = document.getElementById('characterCount');
+    const wordElement = document.getElementById('wordCount');
+    const lineElement = document.getElementById('lineCount');
+    
+    if (charElement) charElement.textContent = characterCount.toLocaleString();
+    if (wordElement) wordElement.textContent = wordCount.toLocaleString();
+    if (lineElement) lineElement.textContent = lineCount.toLocaleString();
+}
+
+function showNotesSaveIndicator(status) {
+    const indicator = document.getElementById('notesSaveIndicator');
+    const statusElement = document.getElementById('notesAutoSaveStatus');
+    
+    if (!indicator || !statusElement) return;
+    
+    switch (status) {
+        case 'saving':
+            indicator.classList.remove('hidden');
+            statusElement.textContent = 'Saving...';
+            statusElement.className = 'text-yellow-600';
+            break;
+        case 'saved':
+            indicator.classList.add('hidden');
+            statusElement.textContent = 'Saved';
+            statusElement.className = 'text-green-600';
+            break;
+        case 'error':
+            indicator.classList.add('hidden');
+            statusElement.textContent = 'Error';
+            statusElement.className = 'text-red-600';
+            break;
+    }
+}
+
+// == TODO FUNCTIONALITY ==
+async function loadTodos() {
+    try {
+        const { data, error } = await supabase
+            .from('todos')
+            .select('*')
+            .eq('user_name', currentUser)
+            .single();
+        
+        if (error && error.code !== 'PGRST116') {
+            throw error;
+        }
+        
+        if (data && data.todos) {
+            todoItems = JSON.parse(data.todos);
+        } else {
+            todoItems = [];
+        }
+        
+        renderTodos();
+        updateTodoStats();
+        
+        if (data && data.updated_at) {
+            updateLastSavedTime(data.updated_at, 'todo');
+        }
+    } catch (error) {
+        console.error('Error loading todos:', error);
+        showToast('❌ Failed to load todos', 'error');
+    }
+}
+
+async function saveTodos() {
+    if (isSavingTodos) return;
+    
+    isSavingTodos = true;
+    showTodoSaveIndicator('saving');
+    
+    try {
+        const { data, error } = await supabase
+            .from('todos')
+            .upsert({
+                user_name: currentUser,
+                todos: JSON.stringify(todoItems)
+            })
+            .select()
+            .single();
+        
+        if (error) throw error;
+        
+        showTodoSaveIndicator('saved');
+        updateLastSavedTime(data.updated_at, 'todo');
+        
+    } catch (error) {
+        console.error('Error saving todos:', error);
+        showTodoSaveIndicator('error');
+        showToast('❌ Failed to save todos', 'error');
+    } finally {
+        isSavingTodos = false;
+    }
+}
+
+function addTodo() {
+    const input = document.getElementById('newTodoInput');
+    const text = input.value.trim();
+    
+    if (!text) return;
+    
+    const newTodo = {
+        id: Date.now(),
+        text: text,
+        completed: false,
+        createdAt: new Date().toISOString()
+    };
+    
+    todoItems.unshift(newTodo);
+    input.value = '';
+    renderTodos();
+    updateTodoStats();
+    saveTodos();
+}
+
+function handleTodoKeyPress(event) {
+    if (event.key === 'Enter') {
+        addTodo();
+    }
+}
+
+function toggleTodo(todoId) {
+    const todo = todoItems.find(t => t.id === todoId);
+    if (todo) {
+        todo.completed = !todo.completed;
+        renderTodos();
+        updateTodoStats();
+        saveTodos();
+    }
+}
+
+function deleteTodo(todoId) {
+    todoItems = todoItems.filter(t => t.id !== todoId);
+    renderTodos();
+    updateTodoStats();
+    saveTodos();
+}
+
+function renderTodos() {
+    const container = document.getElementById('todosList');
+    if (!container) return;
+    
+    if (todoItems.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-8 text-gray-500">
+                <svg class="w-12 h-12 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
+                </svg>
+                <p>No tasks yet. Add your first task above!</p>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = todoItems.map(todo => `
+        <div class="todo-item ${todo.completed ? 'completed' : ''}">
+            <div class="todo-checkbox ${todo.completed ? 'checked' : ''}" onclick="toggleTodo(${todo.id})">
+                ${todo.completed ? '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>' : ''}
+            </div>
+            <div class="todo-text flex-1">${todo.text}</div>
+            <button onclick="deleteTodo(${todo.id})" class="text-red-400 hover:text-red-600 p-1 rounded transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                </svg>
+            </button>
+        </div>
+    `).join('');
+}
+
+function updateTodoStats() {
+    const totalElement = document.getElementById('totalTodos');
+    const completedElement = document.getElementById('completedTodos');
+    
+    if (totalElement) totalElement.textContent = todoItems.length;
+    if (completedElement) completedElement.textContent = todoItems.filter(t => t.completed).length;
+}
+
+function showTodoSaveIndicator(status) {
+    const indicator = document.getElementById('todoSaveIndicator');
+    const statusElement = document.getElementById('todoAutoSaveStatus');
+    
+    if (!indicator || !statusElement) return;
+    
+    switch (status) {
+        case 'saving':
+            indicator.classList.remove('hidden');
+            statusElement.textContent = 'Saving...';
+            statusElement.className = 'text-yellow-600';
+            break;
+        case 'saved':
+            indicator.classList.add('hidden');
+            statusElement.textContent = 'Saved';
+            statusElement.className = 'text-green-600';
+            break;
+        case 'error':
+            indicator.classList.add('hidden');
+            statusElement.textContent = 'Error';
+            statusElement.className = 'text-red-600';
+            break;
+    }
+}
+
+function updateLastSavedTime(timestamp, type) {
+    const elementId = type === 'todo' ? 'todoLastSaved' : 'notesLastSaved';
+    const element = document.getElementById(elementId);
+    if (!element) return;
+    
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now - date) / 1000);
+    
+    let timeText;
+    if (diffInSeconds < 60) {
+        timeText = 'Saved just now';
+    } else if (diffInSeconds < 3600) {
+        timeText = `Saved ${Math.floor(diffInSeconds / 60)} minutes ago`;
+    } else if (diffInSeconds < 86400) {
+        timeText = `Saved ${Math.floor(diffInSeconds / 3600)} hours ago`;
+    } else {
+        timeText = `Saved on ${date.toLocaleDateString()}`;
+    }
+    
+    element.textContent = timeText;
+}
+
+function clearNotes() {
+    document.getElementById('clearNotesModal').classList.remove('hidden');
+}
+
+function closeClearNotesModal() {
+    document.getElementById('clearNotesModal').classList.add('hidden');
+}
+
+async function confirmClearNotes() {
+    const textarea = document.getElementById('notesTextarea');
+    if (textarea) {
+        textarea.value = '';
+        currentNotes = '';
+        updateNotesStats();
+        await saveNotes();
+    }
+    closeClearNotesModal();
+    showToast('🗑️ All notes cleared', 'info');
+}
+
+function clearTodos() {
+    document.getElementById('clearTodosModal').classList.remove('hidden');
+}
+
+function closeClearTodosModal() {
+    document.getElementById('clearTodosModal').classList.add('hidden');
+}
+
+async function confirmClearTodos() {
+    todoItems = [];
+    renderTodos();
+    updateTodoStats();
+    await saveTodos();
+    closeClearTodosModal();
+    showToast('🗑️ All todos cleared', 'info');
+}
+
+function copyNotesToClipboard() {
+    const content = document.getElementById('notesTextarea')?.value || '';
+    if (!content.trim()) {
+        showToast('❌ No notes to copy', 'error');
+        return;
+    }
+    
+    navigator.clipboard.writeText(content).then(() => {
+        showToast('📋 Notes copied to clipboard', 'success');
+    }).catch(() => {
+        showToast('❌ Failed to copy notes', 'error');
+    });
+}
+
+function subscribeToNotes() {
+    supabase
+        .channel('notes-changes')
+        .on('postgres_changes', 
+            { event: '*', schema: 'public', table: 'notes' },
+            (payload) => {
+                console.log('🔄 Notes table changed:', payload);
+                // Only reload if it's for current user and not from current session
+                if (payload.new && payload.new.user_name === currentUser) {
+                    const textarea = document.getElementById('notesTextarea');
+                    if (textarea && payload.new.content !== textarea.value) {
+                        // Another session updated the notes
+                        loadNotes();
+                    }
+                }
+            }
+        )
+        .subscribe();
+}
+
+function subscribeToTodos() {
+    supabase
+        .channel('todos-changes')
+        .on('postgres_changes', 
+            { event: '*', schema: 'public', table: 'todos' },
+            (payload) => {
+                console.log('🔄 Todos table changed:', payload);
+                if (payload.new && payload.new.user_name === currentUser) {
+                    loadTodos();
+                }
+            }
+        )
+        .subscribe();
+}
+
 // == KEYBOARD EVENT LISTENERS ==
 function setupKeyboardEventListeners() {
     document.addEventListener('keydown', function(e) {
@@ -99,13 +787,20 @@ function setupKeyboardEventListeners() {
                 closeAddCategoryModal();
             } else if (!document.getElementById('deleteConfirmModal').classList.contains('hidden')) {
                 closeDeleteConfirmModal();
+            } else if (!document.getElementById('clearNotesModal').classList.contains('hidden')) {
+                closeClearNotesModal();
+            } else if (!document.getElementById('clearTodosModal').classList.contains('hidden')) {
+                closeClearTodosModal();
             } else if (!document.getElementById('logoutConfirmModal').classList.contains('hidden')) {
                 closeLogoutConfirmModal();
             } else if (!document.getElementById('unsavedChangesModal').classList.contains('hidden')) {
                 closeUnsavedChangesModal();
+            } else if (!document.getElementById('imageViewerModal').classList.contains('hidden')) {
+                closeImageViewer();
             } else {
                 // Close dropdowns
                 closeAllDropdowns();
+                closeProfileDropdown({ target: document.body });
             }
         }
     });
@@ -160,6 +855,10 @@ function closeEditModal(event) {
     }
     editingWorkId = null;
     resetUnsavedChanges();
+    
+    // Clear edit images
+    editUploadedImages = [];
+    currentWorkImages = [];
 }
 
 function closeAddCategoryModal(event) {
@@ -233,6 +932,8 @@ function discardChanges() {
         
         if (pendingModalClose === 'editWorkModal') {
             editingWorkId = null;
+            editUploadedImages = [];
+            currentWorkImages = [];
         } else if (pendingModalClose === 'addCategoryModal') {
             document.getElementById('addCategoryForm').reset();
         }
@@ -325,7 +1026,7 @@ function filterCategories(searchTerm) {
         div.innerHTML = `
             <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
-            </svg>
+                </svg>
             ${category.name}
         `;
         categoryOptions.appendChild(div);
@@ -391,7 +1092,8 @@ function setupFormHandlers() {
                 deadline_time: document.getElementById('workDeadlineTime').value || null,
                 priority: document.getElementById('workPriority').value,
                 status: 'Pending',
-                created_by: currentUser
+                created_by: currentUser,
+                images: uploadedImages.map(img => img.url)
             };
             
             try {
@@ -404,15 +1106,21 @@ function setupFormHandlers() {
                 
                 resetForm();
                 resetUnsavedChanges();
+                uploadedImages = [];
+                updateImagePreview();
                 await refreshWorks();
                 showTab('works');
                 showToast('✅ Work added successfully!', 'success');
                 
-                // Show browser notification
-                showBrowserNotification('📝 New Work Added', {
-                    body: `"${workData.work_name}" has been assigned to ${workData.assigned_staff}`,
-                    tag: 'new-work'
-                });
+                // Enhanced notification - only show to other staff members
+                if (assignedStaff !== currentUser) {
+                    showEnhancedNotification(
+                        `${currentUser} added a new work for ${assignedStaff}`,
+                        `"${workData.work_name}" has been assigned`,
+                        memberAvatars[assignedStaff],
+                        assignedStaff
+                    );
+                }
                 
             } catch (error) {
                 console.error('Error adding work:', error);
@@ -434,7 +1142,6 @@ function setupFormHandlers() {
                 return;
             }
             
-            // Check if category already exists
             const existingCategory = categories.find(cat => 
                 cat.name.toLowerCase() === categoryName.toLowerCase()
             );
@@ -470,7 +1177,7 @@ function setupFormHandlers() {
         });
     }
     
-    // Edit work form handler
+    // Edit work form handler - REMOVED CONFIRMATION, DIRECT UPDATE
     const editWorkForm = document.getElementById('editWorkForm');
     if (editWorkForm) {
         editWorkForm.addEventListener('submit', async function(e) {
@@ -478,7 +1185,8 @@ function setupFormHandlers() {
             
             if (!editingWorkId) return;
             
-            // Build update object with only the fields that exist in the database
+            const allImages = [...(currentWorkImages || []), ...editUploadedImages.map(img => img.url)];
+            
             const updatedWork = {
                 work_name: document.getElementById('editWorkName').value,
                 category: document.getElementById('editWorkCategory').value,
@@ -488,10 +1196,10 @@ function setupFormHandlers() {
                 status: document.getElementById('editWorkStatus').value,
                 deadline: document.getElementById('editWorkDeadline').value || null,
                 deadline_time: document.getElementById('editWorkDeadlineTime').value || null,
-                priority: document.getElementById('editWorkPriority').value
+                priority: document.getElementById('editWorkPriority').value,
+                images: allImages
             };
 
-            // Only add MRP and quotation_rate if they have values and the columns exist
             const mrpValue = parseFloat(document.getElementById('editWorkMrp').value);
             const quotationValue = parseFloat(document.getElementById('editWorkQuotationRate').value);
             
@@ -509,8 +1217,7 @@ function setupFormHandlers() {
                     .eq('id', editingWorkId);
                 
                 if (error) {
-                    // If MRP/quotation_rate columns don't exist, try updating without them
-                    if (error.message && error.message.includes('mrp') || error.message.includes('quotation_rate')) {
+                    if (error.message && (error.message.includes('mrp') || error.message.includes('quotation_rate'))) {
                         const { mrp, quotation_rate, ...workWithoutPricing } = updatedWork;
                         
                         const { error: retryError } = await supabase
@@ -520,7 +1227,7 @@ function setupFormHandlers() {
                         
                         if (retryError) throw retryError;
                         
-                        showToast('⚠️ Work updated (pricing fields not available in database)', 'warning');
+                        showToast('⚠️ Work updated (pricing fields not available)', 'warning');
                     } else {
                         throw error;
                     }
@@ -528,11 +1235,18 @@ function setupFormHandlers() {
                     showToast('✅ Work updated successfully!', 'success');
                 }
                 
-                closeEditModal();
+                // DIRECT CLOSE WITHOUT CONFIRMATION
+                const modal = document.getElementById('editWorkModal');
+                if (modal) {
+                    modal.classList.add('hidden');
+                }
+                editingWorkId = null;
                 resetUnsavedChanges();
+                editUploadedImages = [];
+                currentWorkImages = [];
+                
                 await refreshWorks();
                 
-                // Show browser notification
                 showBrowserNotification('📝 Work Updated', {
                     body: `"${updatedWork.work_name}" has been updated`,
                     tag: 'work-update'
@@ -545,16 +1259,30 @@ function setupFormHandlers() {
         });
     }
 
-    // Set up change tracking
     setTimeout(trackChanges, 100);
+}
+
+// == ENHANCED NOTIFICATIONS ==
+function showEnhancedNotification(title, body, avatarUrl, targetUser) {
+    // Only show to other users, not the creator
+    if (targetUser !== currentUser) {
+        showBrowserNotification(title, {
+            body: body,
+            icon: avatarUrl,
+            tag: 'new-work-assignment'
+        });
+    }
 }
 
 // == DROPDOWN MANAGEMENT ==
 function setupDropdownHandlers() {
     // Close dropdowns when clicking outside
     document.addEventListener('click', function(event) {
-        if (!event.target.closest('.custom-dropdown') && !event.target.closest('.status-dropdown')) {
+        if (!event.target.closest('.custom-dropdown') && 
+            !event.target.closest('.status-dropdown') &&
+            !event.target.closest('.profile-dropdown')) {
             closeAllDropdowns();
+            closeProfileDropdown(event);
         }
     });
 }
@@ -719,6 +1447,8 @@ function selectPriority(value) {
 function cancelAddWork() {
     resetForm();
     resetUnsavedChanges();
+    uploadedImages = [];
+    updateImagePreview();
     showTab('dashboard');
 }
 
@@ -809,14 +1539,17 @@ function goToWorksWithFilter(filterType) {
     if (filterType === 'Pending') {
         showCompletedWorks = false;
         selectStatusFilter('Pending');
+    } else if (filterType === 'In Progress') {
+        showCompletedWorks = false;
+        selectStatusFilter('In Progress');
     } else if (filterType === 'Completed') {
-        showCompletedWorks = true; // Show completed works only when clicking completed tile
+        showCompletedWorks = true;
         selectStatusFilter('Completed');
     } else if (filterType === 'today') {
         showCompletedWorks = false;
         selectDeadlineFilter('today');
     } else if (filterType === 'all') {
-        showCompletedWorks = false; // Don't show completed works in "all works"
+        showCompletedWorks = false;
         selectStatusFilter('all');
     }
 }
@@ -893,10 +1626,6 @@ function showToast(message, type = 'info', duration = 3000) {
 
 function copyToClipboard(text) {
     navigator.clipboard.writeText(text).then(() => {
-        showBrowserNotification('📋 Copied to Clipboard', {
-            body: `WhatsApp number ${text} has been copied to your clipboard`,
-            tag: 'clipboard'
-        });
         showToast('📋 WhatsApp number copied to clipboard!', 'success');
     }).catch(() => {
         showToast('❌ Failed to copy to clipboard', 'error');
@@ -916,16 +1645,21 @@ function loginUser(name, role) {
     document.getElementById('loginScreen').classList.add('hidden');
     document.getElementById('mainApp').classList.remove('hidden');
     document.getElementById('userName').textContent = name;
+    document.getElementById('profileUserName').textContent = name;
     document.getElementById('userAvatar').src = memberAvatars[name];
     
     // Initialize app data
     Promise.all([
         refreshWorks(),
-        refreshCategories()
+        refreshCategories(),
+        loadNotes(),
+        loadTodos()
     ]).then(() => {
         setupMemberFilters();
         subscribeToWorks();
         subscribeToNotifications();
+        subscribeToNotes();
+        subscribeToTodos();
         
         renderWorks();
         updateStats();
@@ -937,6 +1671,14 @@ function loginUser(name, role) {
 }
 
 function executeLogout() {
+    // Save notes and todos before logout
+    if (currentNotes !== lastSavedNotes) {
+        saveNotes();
+    }
+    if (todoItems.length > 0) {
+        saveTodos();
+    }
+    
     // Clear saved login state
     localStorage.removeItem('currentUser');
     localStorage.removeItem('currentUserRole');
@@ -947,6 +1689,12 @@ function executeLogout() {
     works = [];
     categories = [];
     showCompletedWorks = false;
+    currentNotes = '';
+    lastSavedNotes = '';
+    todoItems = [];
+    uploadedImages = [];
+    editUploadedImages = [];
+    currentWorkImages = [];
     
     // Reset UI
     document.getElementById('mainApp').classList.add('hidden');
@@ -970,9 +1718,12 @@ function subscribeToWorks() {
         .channel('works-changes')
         .on('postgres_changes', 
             { event: '*', schema: 'public', table: 'works' },
-            (payload) => {
+            async (payload) => {
                 console.log('🔄 Works table changed:', payload);
-                refreshWorks();
+                // Force refresh after a small delay to ensure consistency
+                setTimeout(async () => {
+                    await refreshWorks();
+                }, 500);
             }
         )
         .subscribe();
@@ -986,10 +1737,12 @@ function subscribeToNotifications() {
             (payload) => {
                 const newWork = payload.new;
                 if (newWork.assigned_staff === currentUser && newWork.created_by !== currentUser) {
-                    showBrowserNotification('📝 New Work Assigned', {
-                        body: `You have been assigned: "${newWork.work_name}"`,
-                        tag: 'new-assignment'
-                    });
+                    showEnhancedNotification(
+                        `${newWork.created_by} added a new work for you`,
+                        `"${newWork.work_name}" has been assigned to you`,
+                        memberAvatars[newWork.assigned_staff],
+                        newWork.assigned_staff
+                    );
                 }
             }
         )
@@ -1131,7 +1884,7 @@ function filterWorks() {
                 return new Date(a.deadline) - new Date(b.deadline);
                 
             case 'status':
-                const statusOrder = { 'Pending': 0, 'In Progress': 1, 'Completed': 2 };
+                const statusOrder = { 'Pending': 0, 'In Progress': 1, 'Proof': 2, 'Completed': 3 };
                 return statusOrder[a.status] - statusOrder[b.status];
                 
             default:
@@ -1174,70 +1927,86 @@ function createWorkCard(work) {
     const statusColors = {
         'Pending': 'bg-orange-100 text-orange-800',
         'In Progress': 'bg-blue-100 text-blue-800',
+        'Proof': 'bg-purple-100 text-purple-800',
         'Completed': 'bg-green-100 text-green-800'
     };
     
-    // Enhanced overdue indicator
+    // Fixed overdue indicator - made it properly visible
     const overdueIndicator = isOverdueWork ? `
-        <div class="absolute -top-1 -right-1 z-10">
-            <div class="relative">
-                <div class="w-4 h-4 bg-red-500 rounded-full animate-pulse"></div>
-                <div class="absolute inset-0 w-4 h-4 bg-red-500 rounded-full animate-ping"></div>
+        <div class="overdue-indicator">
+            <div class="overdue-dot">
+                <div class="overdue-ping"></div>
             </div>
         </div>
         <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 to-red-600 rounded-t-lg animate-pulse"></div>
     ` : '';
     
+    // Check if work is being updated
+    const isUpdating = statusUpdateInProgress.has(work.id);
+    
+    // Generate image thumbnail if images exist
+    const imageThumbnail = work.images && work.images.length > 0 ? `
+        <div class="mt-3 mb-2">
+            <div class="flex gap-2 overflow-x-auto">
+                ${work.images.slice(0, 3).map(img => `
+                    <img src="${img}" alt="Work image" class="w-12 h-12 object-cover rounded border cursor-pointer flex-shrink-0" onclick="event.stopPropagation(); viewImage('${img}')">
+                `).join('')}
+                ${work.images.length > 3 ? `<div class="w-12 h-12 bg-gray-100 rounded border flex items-center justify-center text-xs text-gray-600 flex-shrink-0">+${work.images.length - 3}</div>` : ''}
+            </div>
+        </div>
+    ` : '';
+    
     return `
-        <div class="work-card p-6 animate-fade-in relative ${isOverdueWork ? 'ring-2 ring-red-200 bg-red-50' : ''}" onclick="showWorkDetails(${work.id})">
+        <div class="work-card p-6 animate-fade-in ${isOverdueWork ? 'ring-2 ring-red-200 bg-red-50' : ''}" onclick="showWorkDetails(${work.id})">
             ${overdueIndicator}
             
             <div class="flex justify-between items-start mb-4">
-                <div class="flex-1">
-                    <h3 class="font-semibold text-gray-800 text-lg mb-1 line-clamp-2 ${isOverdueWork ? 'text-red-800' : ''}">${work.work_name}</h3>
-                    <p class="text-sm text-gray-600 mb-2">${work.category || 'No Category'}</p>
+                <div class="flex-1 min-w-0 pr-2">
+                    <h3 class="font-semibold text-gray-800 text-lg mb-1 truncate ${isOverdueWork ? 'text-red-800' : ''}">${work.work_name}</h3>
+                    <p class="text-sm text-gray-600 mb-2 truncate">${work.category || 'No Category'}</p>
                 </div>
-                <div class="status-dropdown">
-                    <button class="status-button ${statusColors[work.status] || 'bg-gray-100 text-gray-800'}" 
-                            onclick="event.stopPropagation(); showStatusDropdown(${work.id}, '${work.status}', this)">
-                        ${work.status}
-                        <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                        </svg>
+                <div class="status-dropdown flex-shrink-0">
+                    <button class="status-button ${statusColors[work.status] || 'bg-gray-100 text-gray-800'} ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''}" 
+                            onclick="event.stopPropagation(); ${!isUpdating ? `showStatusDropdown(${work.id}, '${work.status}', this)` : ''}"
+                            ${isUpdating ? 'disabled' : ''}>
+                        ${isUpdating ? '<div class="loading-spinner"></div>' : work.status}
+                        ${!isUpdating ? '<svg class="w-3 h-3 ml-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>' : ''}
                     </button>
                 </div>
             </div>
             
+            ${imageThumbnail}
+            
             <div class="flex items-center justify-between mb-4">
-                <div class="flex items-center gap-2">
-                    <img src="${avatar}" alt="${work.assigned_staff}" class="w-8 h-8 rounded-full object-cover">
-                    <span class="text-sm font-medium text-gray-700">${work.assigned_staff}</span>
+                <div class="flex items-center gap-2 min-w-0 flex-1">
+                    <img src="${avatar}" alt="${work.assigned_staff}" class="w-8 h-8 rounded-full object-cover flex-shrink-0">
+                    <span class="text-sm font-medium text-gray-700 truncate">${work.assigned_staff}</span>
                 </div>
-                <span class="px-2 py-1 rounded-full text-xs font-medium ${priorityColors[work.priority] || 'bg-gray-100 text-gray-800'}">
+                <span class="px-2 py-1 rounded-full text-xs font-medium ${priorityColors[work.priority] || 'bg-gray-100 text-gray-800'} flex-shrink-0 ml-2">
                     ${work.priority}
                 </span>
             </div>
             
             <div class="flex items-center justify-between text-sm text-gray-500">
-                <div class="flex items-center gap-4">
-                    <div class="flex items-center gap-1 ${isOverdueWork ? 'text-red-600 font-medium' : ''}">
-                        <svg class="w-4 h-4 ${isOverdueWork ? 'text-red-500' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="flex items-center gap-4 min-w-0 flex-1">
+                    <div class="flex items-center gap-1 ${isOverdueWork ? 'text-red-600 font-medium' : ''} min-w-0">
+                        <svg class="w-4 h-4 ${isOverdueWork ? 'text-red-500' : ''} flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                         </svg>
-                        ${deadlineText}
-                        ${isOverdueWork ? '<span class="text-red-500 font-bold">⚠️</span>' : ''}
+                        <span class="truncate">${deadlineText}</span>
+                        ${isOverdueWork ? '<span class="text-red-500 font-bold flex-shrink-0">⚠️</span>' : ''}
                     </div>
                     ${work.whatsapp_number ? `
                         <button onclick="event.stopPropagation(); copyToClipboard('${work.whatsapp_number}')" 
-                                class="flex items-center gap-1 text-green-600 hover:text-green-700 transition-colors">
+                                class="flex items-center gap-1 text-green-600 hover:text-green-700 transition-colors flex-shrink-0">
                             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                                 <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.394"></path>
                             </svg>
-                            ${work.whatsapp_number}
+                            <span class="hidden sm:inline">${work.whatsapp_number}</span>
                         </button>
                     ` : ''}
                 </div>
-                <div class="text-xs text-gray-400">
+                <div class="text-xs text-gray-400 flex-shrink-0 ml-2">
                     ${formatRelativeTime(work.created_at)}
                 </div>
             </div>
@@ -1262,7 +2031,7 @@ function createWorkCard(work) {
     `;
 }
 
-// == STATUS DROPDOWN FUNCTION ==
+// == IMPROVED STATUS DROPDOWN FUNCTION ==
 function showStatusDropdown(workId, currentStatus, buttonElement) {
     // Close any existing status dropdowns
     document.querySelectorAll('.status-dropdown-menu').forEach(dropdown => {
@@ -1272,39 +2041,44 @@ function showStatusDropdown(workId, currentStatus, buttonElement) {
     const statusOptions = [
         { value: 'Pending', color: 'bg-orange-100 text-orange-800', icon: '⏳' },
         { value: 'In Progress', color: 'bg-blue-100 text-blue-800', icon: '🔄' },
+        { value: 'Proof', color: 'bg-purple-100 text-purple-800', icon: '🎯' },
         { value: 'Completed', color: 'bg-green-100 text-green-800', icon: '✅' }
     ];
     
     const dropdown = document.createElement('div');
-    dropdown.className = 'status-dropdown-menu absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-32';
+    dropdown.className = 'status-dropdown-menu animate-slide-down';
     
     dropdown.innerHTML = statusOptions.map(option => `
-        <button onclick="changeWorkStatus(${workId}, '${option.value}'); this.parentElement.remove();" 
-                class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors flex items-center gap-2 ${option.value === currentStatus ? 'bg-gray-100 font-medium' : ''}">
+        <button onclick="changeWorkStatus(${workId}, '${option.value}'); this.closest('.status-dropdown-menu').remove();" 
+                class="w-full text-left hover:bg-gray-50 transition-colors ${option.value === currentStatus ? 'bg-gray-100 font-medium' : ''}">
             <span>${option.icon}</span>
             <span class="px-2 py-1 rounded-full text-xs ${option.color}">${option.value}</span>
         </button>
     `).join('');
     
     // Position dropdown relative to button
-    const rect = buttonElement.getBoundingClientRect();
     const container = buttonElement.closest('.status-dropdown');
-    container.style.position = 'relative';
     container.appendChild(dropdown);
     
     // Close dropdown when clicking outside
     setTimeout(() => {
-        document.addEventListener('click', function closeDropdown(e) {
+        const closeHandler = (e) => {
             if (!dropdown.contains(e.target) && e.target !== buttonElement) {
                 dropdown.remove();
-                document.removeEventListener('click', closeDropdown);
+                document.removeEventListener('click', closeHandler);
             }
-        });
+        };
+        document.addEventListener('click', closeHandler);
     }, 100);
 }
 
 // == WORK ACTIONS ==
 async function changeWorkStatus(workId, newStatus) {
+    // Prevent multiple simultaneous updates
+    if (statusUpdateInProgress.has(workId)) return;
+    
+    statusUpdateInProgress.add(workId);
+    
     try {
         const { error } = await supabase
             .from('works')
@@ -1313,7 +2087,17 @@ async function changeWorkStatus(workId, newStatus) {
         
         if (error) throw error;
         
-        await refreshWorks();
+        // Update local state immediately for responsiveness
+        const workIndex = works.findIndex(w => w.id === workId);
+        if (workIndex !== -1) {
+            works[workIndex].status = newStatus;
+        }
+        
+        // Re-render immediately
+        renderWorks();
+        updateStats();
+        updateMemberTiles();
+        
         showToast(`✅ Status updated to ${newStatus}`, 'success');
         
         // Show browser notification
@@ -1324,9 +2108,20 @@ async function changeWorkStatus(workId, newStatus) {
                 tag: 'status-change'
             });
         }
+        
+        // Force refresh from database after a delay to ensure consistency
+        setTimeout(async () => {
+            await refreshWorks();
+        }, 1000);
+        
     } catch (error) {
         console.error('Error updating work status:', error);
         showToast('❌ Failed to update status', 'error');
+        
+        // Refresh on error to restore correct state
+        await refreshWorks();
+    } finally {
+        statusUpdateInProgress.delete(workId);
     }
 }
 
@@ -1347,11 +2142,26 @@ function showWorkDetails(workId) {
     const statusColors = {
         'Pending': 'bg-orange-100 text-orange-800',
         'In Progress': 'bg-blue-100 text-blue-800',
+        'Proof': 'bg-purple-100 text-purple-800',
         'Completed': 'bg-green-100 text-green-800'
     };
     
     const isOverdueWork = isOverdue(work);
     const deadlineText = formatDeadline(work);
+    
+    // Generate images section
+    const imagesSection = work.images && work.images.length > 0 ? `
+        <div>
+            <h4 class="font-semibold text-gray-800 mb-2">Images (${work.images.length})</h4>
+            <div class="image-gallery">
+                ${work.images.map(img => `
+                    <div class="image-item">
+                        <img src="${img}" alt="Work image" onclick="viewImage('${img}')">
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    ` : '';
     
     const content = `
         <div class="space-y-6">
@@ -1375,6 +2185,8 @@ function showWorkDetails(workId) {
                     <p class="text-gray-600 bg-gray-50 p-3 rounded-lg">${work.description}</p>
                 </div>
             ` : ''}
+            
+            ${imagesSection}
             
             <!-- Pricing Information -->
             ${work.mrp || work.quotation_rate ? `
@@ -1443,14 +2255,7 @@ function showWorkDetails(workId) {
                     <button onclick="copyToClipboard('${work.whatsapp_number}')" 
                             class="flex items-center gap-3 bg-green-50 hover:bg-green-100 p-3 rounded-lg transition-colors w-full text-left">
                         <svg class="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.394"></path>
-                        </svg>
-                        <div>
-                            <div class="font-medium text-gray-800">${work.whatsapp_number}</div>
-                            <div class="text-sm text-gray-600">Click to copy</div>
-                        </div>
-                    </button>
-                </div>
+                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0
             ` : ''}
             
             <!-- Actions -->
@@ -1484,6 +2289,10 @@ function editWork(workId) {
     editingWorkId = workId;
     resetUnsavedChanges();
     
+    // Store current work images for editing
+    currentWorkImages = work.images ? [...work.images] : [];
+    editUploadedImages = [];
+    
     // Populate form fields
     document.getElementById('editWorkName').value = work.work_name || '';
     document.getElementById('editWorkCategory').value = work.category || '';
@@ -1496,6 +2305,9 @@ function editWork(workId) {
     document.getElementById('editWorkDeadline').value = work.deadline || '';
     document.getElementById('editWorkDeadlineTime').value = work.deadline_time || '';
     document.getElementById('editWorkPriority').value = work.priority || 'Medium';
+    
+    // Update image preview
+    updateEditImagePreview();
     
     document.getElementById('editWorkModal').classList.remove('hidden');
     
@@ -1628,11 +2440,13 @@ function updateDateTime() {
 function updateStats() {
     const totalWorksElement = document.getElementById('totalWorks');
     const pendingWorksElement = document.getElementById('pendingWorks');
+    const inProgressWorksElement = document.getElementById('inProgressWorks');
     const completedWorksElement = document.getElementById('completedWorks');
     const dueTodayWorksElement = document.getElementById('dueTodayWorks');
     
     if (totalWorksElement) totalWorksElement.textContent = works.length;
     if (pendingWorksElement) pendingWorksElement.textContent = works.filter(w => w.status === 'Pending').length;
+    if (inProgressWorksElement) inProgressWorksElement.textContent = works.filter(w => w.status === 'In Progress').length;
     if (completedWorksElement) completedWorksElement.textContent = works.filter(w => w.status === 'Completed').length;
     
     if (dueTodayWorksElement) {
@@ -1666,7 +2480,8 @@ function updateRecentActivity() {
         const avatar = memberAvatars[work.assigned_staff] || 'default-avatar.jpg';
         const statusColors = {
             'Pending': 'bg-orange-100 text-orange-800',
-            'In Progress': 'bg-blue-100 text-blue-800', 
+            'In Progress': 'bg-blue-100 text-blue-800',
+            'Proof': 'bg-purple-100 text-purple-800', 
             'Completed': 'bg-green-100 text-green-800'
         };
         
@@ -1740,13 +2555,17 @@ function showTab(tabName) {
         activeContent.classList.remove('hidden');
     }
     
-    // Update data when switching to works tab
+    // Update data when switching to specific tabs
     if (tabName === 'works') {
         renderWorks();
         updateMemberTiles();
     } else if (tabName === 'dashboard') {
         updateStats();
         updateRecentActivity();
+    } else if (tabName === 'notes') {
+        // Update notes stats when switching to notes tab
+        updateNotesStats();
+        updateTodoStats();
     }
 }
 
@@ -1794,3 +2613,27 @@ window.toggleSortDropdown = toggleSortDropdown;
 window.toggleAssignStaffDropdown = toggleAssignStaffDropdown;
 window.togglePriorityDropdown = togglePriorityDropdown;
 window.toggleCategorySearchDropdown = toggleCategorySearchDropdown;
+window.toggleProfileDropdown = toggleProfileDropdown;
+
+// Notes functions
+window.handleNotesInput = handleNotesInput;
+window.clearNotes = clearNotes;
+window.closeClearNotesModal = closeClearNotesModal;
+window.confirmClearNotes = confirmClearNotes;
+window.copyNotesToClipboard = copyNotesToClipboard;
+
+// Todo functions
+window.addTodo = addTodo;
+window.handleTodoKeyPress = handleTodoKeyPress;
+window.toggleTodo = toggleTodo;
+window.deleteTodo = deleteTodo;
+window.clearTodos = clearTodos;
+window.closeClearTodosModal = closeClearTodosModal;
+window.confirmClearTodos = confirmClearTodos;
+
+// Image functions
+window.handleImageUpload = handleImageUpload;
+window.handleEditImageUpload = handleEditImageUpload;
+window.removeImage = removeImage;
+window.viewImage = viewImage;
+window.closeImageViewer = closeImageViewer;
