@@ -20,6 +20,8 @@
             --animate-bounce-in: bounceIn 0.6s ease-out;
             --animate-slide-down: slideDown 0.2s ease-out;
             --animate-scale-in: scaleIn 0.2s ease-out;
+            --animate-pulse: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+            --animate-spin: spin 1s linear infinite;
         }
         
         @keyframes fadeIn {
@@ -47,6 +49,16 @@
         @keyframes scaleIn {
             from { opacity: 0; transform: scale(0.95); }
             to { opacity: 1; transform: scale(1); }
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
         }
         
         .glass-effect {
@@ -176,17 +188,62 @@
         }
         
         .status-button {
-            padding: 0.25rem 0.75rem;
+            padding: 0.375rem 0.75rem;
             border-radius: 9999px;
             font-size: 0.75rem;
             font-weight: 500;
             cursor: pointer;
             border: 0;
             transition: opacity 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            min-height: 28px;
+            white-space: nowrap;
         }
         
         .status-button:hover {
             opacity: 0.8;
+        }
+        
+        .status-dropdown-menu {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            margin-top: 0.25rem;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            z-index: 50;
+            min-width: 9rem;
+            overflow: hidden;
+        }
+        
+        .status-dropdown-menu button {
+            width: 100%;
+            padding: 0.75rem;
+            text-align: left;
+            border: none;
+            background: none;
+            cursor: pointer;
+            transition: background-color 0.15s ease-in-out;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .status-dropdown-menu button:hover {
+            background-color: #f3f4f6;
+        }
+        
+        .loading-spinner {
+            width: 12px;
+            height: 12px;
+            border: 2px solid #e5e7eb;
+            border-top: 2px solid currentColor;
+            border-radius: 50%;
+            animation: var(--animate-spin);
         }
         
         .search-input {
@@ -207,12 +264,48 @@
             border: 1px solid #e5e7eb;
             transition: all 0.3s ease;
             cursor: pointer;
+            position: relative;
         }
         
         .work-card:hover {
             border-color: var(--color-primary);
             box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             transform: translateY(-1px);
+        }
+        
+        /* Fix overdue indicator to be visible */
+        .overdue-indicator {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            z-index: 10;
+            overflow: visible !important;
+        }
+        
+        .overdue-dot {
+            width: 16px;
+            height: 16px;
+            background: #ef4444;
+            border-radius: 50%;
+            animation: var(--animate-pulse);
+            position: relative;
+        }
+        
+        .overdue-ping {
+            position: absolute;
+            inset: 0;
+            width: 16px;
+            height: 16px;
+            background: #ef4444;
+            border-radius: 50%;
+            animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
+        }
+        
+        @keyframes ping {
+            75%, 100% {
+                transform: scale(2);
+                opacity: 0;
+            }
         }
         
         .time-input-container {
@@ -228,6 +321,27 @@
             background: white;
             border: 2px solid #e5e7eb;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            max-height: calc(100vh - 2rem);
+        }
+        
+        .modal-header {
+            flex-shrink: 0;
+            padding: 2rem 2rem 0 2rem;
+        }
+        
+        .modal-body {
+            flex: 1;
+            padding: 1rem 2rem;
+            overflow-y: auto;
+        }
+        
+        .modal-footer {
+            flex-shrink: 0;
+            padding: 1rem 2rem 2rem 2rem;
+            border-top: 1px solid #e5e7eb;
+            background: #f9fafb;
         }
         
         .clear-filters-btn {
@@ -245,6 +359,285 @@
             background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
             transform: translateY(-1px);
             box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+        }
+        
+        /* Notes specific styles */
+        .notes-container {
+            min-height: calc(100vh - 200px);
+        }
+        
+        .notes-textarea {
+            min-height: 300px;
+            resize: vertical;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            line-height: 1.6;
+        }
+        
+        .notes-textarea:focus {
+            outline: none;
+            ring: 2px;
+            ring-color: var(--color-primary);
+            ring-opacity: 0.2;
+        }
+        
+        /* Todo list styles */
+        .todo-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            background: white;
+            transition: all 0.2s;
+        }
+        
+        .todo-item:hover {
+            border-color: var(--color-accent);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .todo-item.completed {
+            background: #f0f9ff;
+            border-color: #0ea5e9;
+        }
+        
+        .todo-item.completed .todo-text {
+            text-decoration: line-through;
+            color: #6b7280;
+        }
+        
+        .todo-checkbox {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #d1d5db;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        
+        .todo-checkbox.checked {
+            background: var(--color-accent);
+            border-color: var(--color-accent);
+            color: white;
+        }
+        
+        .todo-input {
+            border: 1px solid #d1d5db;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            width: 100%;
+            transition: border-color 0.2s;
+        }
+        
+        .todo-input:focus {
+            outline: none;
+            border-color: var(--color-accent);
+        }
+        
+        .add-todo-btn {
+            background: var(--color-accent);
+            color: white;
+            border: none;
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .add-todo-btn:hover {
+            background: #0891b2;
+        }
+        
+        /* Profile dropdown */
+        .profile-dropdown {
+            position: relative;
+        }
+        
+        .profile-dropdown-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 0.25rem;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            z-index: 50;
+            min-width: 10rem;
+            overflow: hidden;
+        }
+        
+        .profile-dropdown-item {
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            transition: all 0.15s ease-in-out;
+            color: #374151;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .profile-dropdown-item:hover {
+            background-color: #f3f4f6;
+        }
+        
+        .profile-dropdown-item.logout {
+            color: #dc2626;
+            border-top: 1px solid #e5e7eb;
+        }
+        
+        .profile-dropdown-item.logout:hover {
+            background-color: #fef2f2;
+        }
+        
+        /* Image upload styles */
+        .image-upload-area {
+            border: 2px dashed #d1d5db;
+            border-radius: 0.75rem;
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.2s;
+            background: #f9fafb;
+        }
+        
+        .image-upload-area:hover {
+            border-color: var(--color-primary);
+            background: #f0f9ff;
+        }
+        
+        .image-upload-area.dragover {
+            border-color: var(--color-primary);
+            background: #eff6ff;
+        }
+        
+        .image-preview {
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: 0.5rem;
+            object-fit: cover;
+        }
+        
+        .image-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 1rem;
+        }
+        
+        .image-item {
+            position: relative;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            background: #f3f4f6;
+        }
+        
+        .image-item img {
+            width: 100%;
+            height: 120px;
+            object-fit: cover;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .image-item img:hover {
+            transform: scale(1.05);
+        }
+        
+        .image-remove-btn {
+            position: absolute;
+            top: 0.25rem;
+            right: 0.25rem;
+            background: rgba(239, 68, 68, 0.9);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background 0.2s;
+        }
+        
+        .image-remove-btn:hover {
+            background: #dc2626;
+        }
+        
+        /* Mobile responsive styles */
+        @media (max-width: 768px) {
+            .hide-mobile {
+                display: none !important;
+            }
+            
+            .nav-tab {
+                padding: 0.5rem;
+                min-width: 44px;
+                justify-content: center;
+            }
+            
+            .nav-tab-text {
+                display: none;
+            }
+            
+            .nav-tab-icon {
+                display: block;
+            }
+            
+            .member-tile {
+                padding: 0.75rem;
+                font-size: 0.875rem;
+            }
+            
+            .work-card {
+                padding: 1rem;
+            }
+            
+            .modal-content {
+                margin: 1rem;
+                max-height: calc(100vh - 2rem);
+            }
+            
+            .modal-header {
+                padding: 1rem 1rem 0 1rem;
+            }
+            
+            .modal-body {
+                padding: 1rem;
+            }
+            
+            .modal-footer {
+                padding: 1rem;
+            }
+            
+            .notes-textarea {
+                min-height: 250px;
+            }
+        }
+        
+        @media (max-width: 640px) {
+            .grid-mobile-1 {
+                grid-template-columns: 1fr;
+            }
+            
+            .grid-mobile-2 {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .text-mobile-sm {
+                font-size: 0.75rem;
+            }
+            
+            .p-mobile-sm {
+                padding: 0.5rem;
+            }
         }
         
         /* Animation classes */
@@ -266,6 +659,14 @@
         
         .animate-scale-in {
             animation: var(--animate-scale-in);
+        }
+        
+        .animate-pulse {
+            animation: var(--animate-pulse);
+        }
+        
+        .animate-spin {
+            animation: var(--animate-spin);
         }
     </style>
 </head>
@@ -338,7 +739,7 @@
                     <!-- Logo and Brand -->
                     <div class="flex items-center gap-4">
                         <img src="logo.png" alt="Ace Creative" class="h-10 w-13 rounded-lg object-cover">
-                        <div>
+                        <div class="hide-mobile">
                             <div class="font-bold text-gray-800 text-lg">Ace Creative</div>
                             <div class="text-xs text-gray-500">Work Management</div>
                         </div>
@@ -347,55 +748,71 @@
                     <!-- Navigation Tabs -->
                     <div class="flex space-x-1">
                         <button onclick="showTab('dashboard')" id="dashboardTab" 
-                                class="nav-tab px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 bg-primary text-white">
-                            <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                class="nav-tab px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 bg-primary text-white flex items-center">
+                            <svg class="w-4 h-4 nav-tab-icon mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v6H8V5z"></path>
                             </svg>
-                            Dashboard
+                            <span class="nav-tab-text">Dashboard</span>
                         </button>
                         <button onclick="showTab('works')" id="worksTab" 
-                                class="nav-tab px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 text-gray-600 hover:text-gray-800 hover:bg-gray-100">
-                            <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                class="nav-tab px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 text-gray-600 hover:text-gray-800 hover:bg-gray-100 flex items-center">
+                            <svg class="w-4 h-4 nav-tab-icon mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
                             </svg>
-                            All Works
+                            <span class="nav-tab-text">All Works</span>
                         </button>
                         <button onclick="showTab('add')" id="addTab" 
-                                class="nav-tab px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 text-gray-600 hover:text-gray-800 hover:bg-gray-100">
-                            <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                class="nav-tab px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 text-gray-600 hover:text-gray-800 hover:bg-gray-100 flex items-center">
+                            <svg class="w-4 h-4 nav-tab-icon mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                             </svg>
-                            Add Work
+                            <span class="nav-tab-text">Add Work</span>
+                        </button>
+                        <button onclick="showTab('notes')" id="notesTab" 
+                                class="nav-tab px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 text-gray-600 hover:text-gray-800 hover:bg-gray-100 flex items-center">
+                            <svg class="w-4 h-4 nav-tab-icon mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                            </svg>
+                            <span class="nav-tab-text">Notes</span>
                         </button>
                     </div>
 
                     <!-- User Profile and Actions -->
                     <div class="flex items-center gap-4">
-                        <div class="flex items-center gap-3">
-                            <img id="userAvatar" src="" alt="User" class="w-10 h-10 rounded-full object-cover ring-2 ring-primary/20">
-                            <div class="hidden md:block">
-                                <div id="userName" class="font-semibold text-gray-800 text-sm"></div>
-                                <div id="currentDateTime" class="text-xs text-gray-500"></div>
+                        <div class="profile-dropdown">
+                            <div class="flex items-center gap-3 cursor-pointer" onclick="toggleProfileDropdown()">
+                                <img id="userAvatar" src="" alt="User" class="w-10 h-10 rounded-full object-cover ring-2 ring-primary/20">
+                                <div class="hidden md:block hide-mobile">
+                                    <div id="userName" class="font-semibold text-gray-800 text-sm"></div>
+                                    <div id="currentDateTime" class="text-xs text-gray-500"></div>
+                                </div>
+                            </div>
+                            <div id="profileDropdownMenu" class="profile-dropdown-menu hidden animate-slide-down">
+                                <div class="profile-dropdown-item">
+                                    <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                    </svg>
+                                    <span id="profileUserName"></span>
+                                </div>
+                                <div class="profile-dropdown-item logout" onclick="showLogoutConfirmation()">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                                    </svg>
+                                    Logout
+                                </div>
                             </div>
                         </div>
                         
-                        <div class="flex items-center gap-2">
-                            <button onclick="toggleNotifications()" class="p-2 text-gray-400 hover:text-gray-600 transition-colors duration-200 rounded-full hover:bg-gray-100">
-                                <div class="relative">
-                                    <div class="w-6 h-6 bg-gradient-to-r from-primary to-secondary rounded-full flex items-center justify-center">
-                                        <svg class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                            <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z"></path>
-                                        </svg>
-                                    </div>
+                        <button onclick="toggleNotifications()" class="p-2 text-gray-400 hover:text-gray-600 transition-colors duration-200 rounded-full hover:bg-gray-100">
+                            <div class="relative">
+                                <div class="w-6 h-6 bg-gradient-to-r from-primary to-secondary rounded-full flex items-center justify-center">
+                                    <svg class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z"></path>
+                                    </svg>
                                 </div>
-                            </button>
-                            <button onclick="showLogoutConfirmation()" class="p-2 text-red-400 hover:text-red-600 transition-colors duration-200 rounded-full hover:bg-red-50">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                                </svg>
-                            </button>
-                        </div>
+                            </div>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -405,11 +822,11 @@
         <div id="dashboardContent" class="tab-content">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 <!-- Stats Cards -->
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                    <div onclick="goToWorksWithFilter('all')" class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 card-hover transition-all duration-300 cursor-pointer">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8 grid-mobile-2 md:grid-cols-3">
+                    <div onclick="goToWorksWithFilter('all')" class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 card-hover transition-all duration-300 cursor-pointer p-mobile-sm">
                         <div class="flex items-center justify-between">
                             <div>
-                                <p class="text-sm font-medium text-gray-600">Total Works</p>
+                                <p class="text-sm font-medium text-gray-600 text-mobile-sm">Total Works</p>
                                 <p id="totalWorks" class="text-3xl font-bold text-gray-900">0</p>
                             </div>
                             <div class="bg-blue-100 p-3 rounded-full">
@@ -421,10 +838,10 @@
                         <div class="mt-2 text-xs text-gray-500">All assigned works • Click to view</div>
                     </div>
 
-                    <div onclick="goToWorksWithFilter('Pending')" class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 card-hover transition-all duration-300 cursor-pointer">
+                    <div onclick="goToWorksWithFilter('Pending')" class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 card-hover transition-all duration-300 cursor-pointer p-mobile-sm">
                         <div class="flex items-center justify-between">
                             <div>
-                                <p class="text-sm font-medium text-gray-600">Pending</p>
+                                <p class="text-sm font-medium text-gray-600 text-mobile-sm">Pending</p>
                                 <p id="pendingWorks" class="text-3xl font-bold text-orange-600">0</p>
                             </div>
                             <div class="bg-orange-100 p-3 rounded-full">
@@ -436,10 +853,25 @@
                         <div class="mt-2 text-xs text-gray-500">Awaiting action • Click to view</div>
                     </div>
 
-                    <div onclick="goToWorksWithFilter('Completed')" class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 card-hover transition-all duration-300 cursor-pointer">
+                    <div onclick="goToWorksWithFilter('In Progress')" class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 card-hover transition-all duration-300 cursor-pointer p-mobile-sm">
                         <div class="flex items-center justify-between">
                             <div>
-                                <p class="text-sm font-medium text-gray-600">Completed</p>
+                                <p class="text-sm font-medium text-gray-600 text-mobile-sm">In Progress</p>
+                                <p id="inProgressWorks" class="text-3xl font-bold text-blue-600">0</p>
+                            </div>
+                            <div class="bg-blue-100 p-3 rounded-full">
+                                <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="mt-2 text-xs text-gray-500">Currently working • Click to view</div>
+                    </div>
+
+                    <div onclick="goToWorksWithFilter('Completed')" class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 card-hover transition-all duration-300 cursor-pointer p-mobile-sm">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-gray-600 text-mobile-sm">Completed</p>
                                 <p id="completedWorks" class="text-3xl font-bold text-green-600">0</p>
                             </div>
                             <div class="bg-green-100 p-3 rounded-full">
@@ -451,10 +883,10 @@
                         <div class="mt-2 text-xs text-gray-500">Successfully finished • Click to view</div>
                     </div>
 
-                    <div onclick="goToWorksWithFilter('today')" class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 card-hover transition-all duration-300 cursor-pointer">
+                    <div onclick="goToWorksWithFilter('today')" class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 card-hover transition-all duration-300 cursor-pointer p-mobile-sm">
                         <div class="flex items-center justify-between">
                             <div>
-                                <p class="text-sm font-medium text-gray-600">Due Today</p>
+                                <p class="text-sm font-medium text-gray-600 text-mobile-sm">Due Today</p>
                                 <p id="dueTodayWorks" class="text-3xl font-bold text-red-600">0</p>
                             </div>
                             <div class="bg-red-100 p-3 rounded-full">
@@ -467,13 +899,13 @@
                     </div>
                 </div>
 
-                <!-- Quick Actions -->
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+                <!-- Quick Actions with fixed layout -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 grid-mobile-1">
+                    <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 p-mobile-sm">
                         <h3 class="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h3>
                         <div class="space-y-3">
                             <button onclick="showTab('works')" class="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-primary to-secondary text-white hover:opacity-90 transition-all duration-300 card-hover">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg class="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
                                 </svg>
                                 <div class="text-left">
@@ -483,7 +915,7 @@
                             </button>
 
                             <button onclick="showTab('add')" class="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-accent to-green-500 text-white hover:opacity-90 transition-all duration-300 card-hover">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg class="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                                 </svg>
                                 <div class="text-left">
@@ -491,10 +923,20 @@
                                     <div class="text-sm opacity-90">Create and assign new tasks</div>
                                 </div>
                             </button>
+
+                            <button onclick="showTab('notes')" class="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 transition-all duration-300 card-hover">
+                                <svg class="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                </svg>
+                                <div class="text-left">
+                                    <div class="font-semibold">Quick Notes</div>
+                                    <div class="text-sm opacity-90">Write important things and ideas</div>
+                                </div>
+                            </button>
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+                    <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 p-mobile-sm">
                         <h3 class="text-lg font-semibold text-gray-800 mb-4">Recent Activity</h3>
                         <div id="recentActivity" class="space-y-3">
                             <p class="text-gray-500 text-center py-8">No recent activity</p>
@@ -508,7 +950,7 @@
         <div id="worksContent" class="tab-content hidden">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 <!-- Filters -->
-                <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 mb-6">
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 mb-6 p-mobile-sm">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-lg font-semibold text-gray-800">Filter Works</h3>
                         <button onclick="clearAllFilters()" class="clear-filters-btn flex items-center gap-2">
@@ -519,7 +961,7 @@
                         </button>
                     </div>
                     
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 grid-mobile-1">
                         <!-- Status Filter -->
                         <div class="custom-dropdown">
                             <label class="block text-sm font-medium text-gray-700 mb-2">Filter by Status:</label>
@@ -533,6 +975,7 @@
                                 <div class="dropdown-item" onclick="selectStatusFilter('all')">All Status</div>
                                 <div class="dropdown-item" onclick="selectStatusFilter('Pending')">Pending</div>
                                 <div class="dropdown-item" onclick="selectStatusFilter('In Progress')">In Progress</div>
+                                <div class="dropdown-item" onclick="selectStatusFilter('Proof')">Proof</div>
                                 <div class="dropdown-item" onclick="selectStatusFilter('Completed')">Completed</div>
                             </div>
                         </div>
@@ -593,7 +1036,7 @@
                     </div>
 
                     <!-- Member Tiles -->
-                    <div id="memberTiles" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <div id="memberTiles" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 grid-mobile-2">
                         <div class="member-tile active" onclick="selectMemberTile('all')">
                             <div class="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
                                 <svg class="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
@@ -644,7 +1087,7 @@
                 </div>
 
                 <!-- Enhanced Works Cards Layout -->
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="worksCardsContainer">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 grid-mobile-1" id="worksCardsContainer">
                     <!-- Work cards will be populated here -->
                 </div>
                         
@@ -662,7 +1105,7 @@
         <!-- Enhanced Add Work Tab -->
         <div id="addContent" class="tab-content hidden">
             <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <div class="bg-white rounded-2xl p-8 shadow-sm border border-gray-200">
+                <div class="bg-white rounded-2xl p-8 shadow-sm border border-gray-200 p-mobile-sm">
                     <h2 class="text-2xl font-bold text-gray-800 mb-6">Add New Work</h2>
                     
                     <form id="workForm" class="space-y-6">
@@ -706,7 +1149,7 @@
                         </div>
 
                         <!-- MRP and Quotation Rate -->
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 grid-mobile-1">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">MRP</label>
                                 <input type="number" id="workMrp" step="0.01" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Enter MRP">
@@ -714,6 +1157,28 @@
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Quotation Rate</label>
                                 <input type="number" id="workQuotationRate" step="0.01" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Enter quotation rate">
+                            </div>
+                        </div>
+
+                        <!-- Image Upload Section -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Attach Images</label>
+                            <div class="image-upload-area" id="imageUploadArea" onclick="document.getElementById('imageInput').click()">
+                                <input type="file" id="imageInput" multiple accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
+                                <svg class="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                                </svg>
+                                <p class="text-gray-600 mb-2">Click to upload images or drag and drop</p>
+                                <p class="text-sm text-gray-500">PNG, JPG, GIF up to 10MB each</p>
+                            </div>
+                            <div id="imagePreviewContainer" class="mt-4 image-gallery hidden">
+                                <!-- Image previews will be shown here -->
+                            </div>
+                            <div id="uploadProgress" class="hidden mt-2">
+                                <div class="bg-gray-200 rounded-full h-2">
+                                    <div id="uploadProgressBar" class="bg-primary h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                                </div>
+                                <p class="text-sm text-gray-600 mt-1">Uploading images...</p>
                             </div>
                         </div>
                         
@@ -752,7 +1217,7 @@
                         </div>
                         
                         <!-- Enhanced Deadline with Date and Time -->
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 grid-mobile-1">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Deadline Date</label>
                                 <input type="date" id="workDeadline" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
@@ -786,7 +1251,7 @@
                             <input type="hidden" id="workPriority" value="Medium">
                         </div>
                         
-                        <div class="flex gap-4">
+                        <div class="flex gap-4 grid-mobile-1">
                             <button type="button" onclick="cancelAddWork()" class="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200">Cancel</button>
                             <button type="submit" class="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:opacity-90 transition-all duration-300">Add Work</button>
                         </div>
@@ -794,151 +1259,337 @@
                 </div>
             </div>
         </div>
+
+        <!-- Enhanced Notes Tab -->
+        <div id="notesContent" class="tab-content hidden">
+            <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 grid-mobile-1">
+                    <!-- Notes Section -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 notes-container p-mobile-sm">
+                        <div class="border-b border-gray-200 p-6">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <h2 class="text-2xl font-bold text-gray-800">Quick Notes</h2>
+                                    <p class="text-gray-600 mt-1">Write important things and ideas. Auto-saves as you type.</p>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <div id="notesLastSaved" class="text-sm text-gray-500">
+                                        <!-- Last saved time will be shown here -->
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <div id="notesSaveIndicator" class="hidden">
+                                            <div class="loading-spinner"></div>
+                                        </div>
+                                        <button onclick="clearNotes()" class="px-3 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors">
+                                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                            </svg>
+                                            Clear All
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="p-6">
+                            <div class="relative">
+                                <textarea 
+                                    id="notesTextarea" 
+                                    class="notes-textarea w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent resize-vertical"
+                                    placeholder="Start typing your notes here... Your notes will be automatically saved as you type.
+
+You can write:
+• Important reminders
+• Client details and requirements
+• Project ideas and brainstorming
+• Meeting notes
+• Contact information
+• Quick thoughts and ideas
+
+Everything is saved automatically - no need to worry about losing your work!"
+                                    oninput="handleNotesInput()"
+                                    onpaste="handleNotesInput()"
+                                    oncut="handleNotesInput()">
+                                </textarea>
+                                
+                                <div class="absolute bottom-2 right-2 bg-white bg-opacity-75 px-2 py-1 rounded text-xs text-gray-500">
+                                    <span id="characterCount">0</span> characters
+                                </div>
+                            </div>
+                            
+                            <div class="mt-4 flex items-center justify-between text-sm text-gray-500">
+                                <div class="flex items-center gap-4">
+                                    <span>📝 Lines: <span id="lineCount">0</span></span>
+                                    <span>📊 Words: <span id="wordCount">0</span></span>
+                                    <span>⏱️ Auto-save: <span id="notesAutoSaveStatus">Ready</span></span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button onclick="copyNotesToClipboard()" class="px-3 py-1 text-green-600 hover:text-green-700 hover:bg-green-50 rounded transition-colors">
+                                        <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                        </svg>
+                                        Copy
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- To-Do Section -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 notes-container p-mobile-sm">
+                        <div class="border-b border-gray-200 p-6">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <h2 class="text-2xl font-bold text-gray-800">To-Do List</h2>
+                                    <p class="text-gray-600 mt-1">Keep track of your tasks and priorities.</p>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <div id="todoLastSaved" class="text-sm text-gray-500">
+                                        <!-- Last saved time will be shown here -->
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <div id="todoSaveIndicator" class="hidden">
+                                            <div class="loading-spinner"></div>
+                                        </div>
+                                        <button onclick="clearTodos()" class="px-3 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors">
+                                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                            </svg>
+                                            Clear All
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="p-6">
+                            <!-- Add Todo Form -->
+                            <div class="mb-6">
+                                <div class="flex gap-2">
+                                    <input 
+                                        type="text" 
+                                        id="newTodoInput" 
+                                        class="todo-input flex-1" 
+                                        placeholder="Add a new task..."
+                                        onkeypress="handleTodoKeyPress(event)"
+                                    />
+                                    <button onclick="addTodo()" class="add-todo-btn">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                        </svg>
+                                        Add
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Todo Items -->
+                            <div id="todosList" class="space-y-3 max-h-96 overflow-y-auto">
+                                <!-- Todo items will be populated here -->
+                            </div>
+
+                            <!-- Todo Stats -->
+                            <div class="mt-4 flex items-center justify-between text-sm text-gray-500 pt-4 border-t">
+                                <div class="flex items-center gap-4">
+                                    <span>📋 Total: <span id="totalTodos">0</span></span>
+                                    <span>✅ Completed: <span id="completedTodos">0</span></span>
+                                    <span>⏱️ Auto-save: <span id="todoAutoSaveStatus">Ready</span></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Work Details Modal -->
     <div id="workDetailsModal" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4" onclick="closeWorkDetailsModal(event)">
-        <div class="modal-content rounded-2xl p-8 w-full max-w-2xl max-h-screen overflow-y-auto animate-scale-in" onclick="event.stopPropagation()">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-bold text-gray-800">Work Details</h2>
-                <button onclick="closeWorkDetailsModal()" class="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-full transition-colors">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
+        <div class="modal-content rounded-2xl w-full max-w-2xl animate-scale-in" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-2xl font-bold text-gray-800">Work Details</h2>
+                    <button onclick="closeWorkDetailsModal()" class="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-full transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
             </div>
             
-            <div id="workDetailsContent" class="space-y-6">
-                <!-- Work details will be populated here -->
+            <div class="modal-body">
+                <div id="workDetailsContent" class="space-y-6">
+                    <!-- Work details will be populated here -->
+                </div>
             </div>
         </div>
     </div>
 
     <!-- Add Category Modal -->
     <div id="addCategoryModal" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4" onclick="closeAddCategoryModal(event)">
-        <div class="modal-content rounded-2xl p-8 w-full max-w-md animate-scale-in" onclick="event.stopPropagation()">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-xl font-bold text-gray-800">Add New Category</h2>
-                <button onclick="closeAddCategoryModal()" class="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-full transition-colors">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
+        <div class="modal-content rounded-2xl w-full max-w-md animate-scale-in" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-xl font-bold text-gray-800">Add New Category</h2>
+                    <button onclick="closeAddCategoryModal()" class="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-full transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
             </div>
             
-            <form id="addCategoryForm" class="space-y-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Category Name <span class="text-red-500">*</span></label>
-                    <input type="text" id="newCategoryName" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Enter category name">
-                </div>
-                
+            <div class="modal-body">
+                <form id="addCategoryForm" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Category Name <span class="text-red-500">*</span></label>
+                        <input type="text" id="newCategoryName" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Enter category name">
+                    </div>
+                </form>
+            </div>
+            
+            <div class="modal-footer">
                 <div class="flex gap-3">
                     <button type="button" onclick="closeAddCategoryModal()" class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200">Cancel</button>
-                    <button type="submit" class="flex-1 px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90 transition-all duration-300">Add Category</button>
+                    <button type="submit" form="addCategoryForm" class="flex-1 px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90 transition-all duration-300">Add Category</button>
                 </div>
-            </form>
+            </div>
         </div>
     </div>
 
-    <!-- Edit Work Modal -->
+    <!-- Edit Work Modal with fixed footer -->
     <div id="editWorkModal" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4" onclick="closeEditModal(event)">
-        <div class="modal-content rounded-2xl p-8 w-full max-w-2xl max-h-screen overflow-y-auto animate-scale-in" onclick="event.stopPropagation()">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-bold text-gray-800">Edit Work</h2>
-                <button onclick="closeEditModal()" class="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-full transition-colors">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
+        <div class="modal-content rounded-2xl w-full max-w-2xl animate-scale-in" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-2xl font-bold text-gray-800">Edit Work</h2>
+                    <button onclick="closeEditModal()" class="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-full transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
             </div>
             
-            <form id="editWorkForm" class="space-y-6">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Work Name <span class="text-red-500">*</span></label>
-                    <input type="text" id="editWorkName" required class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-                </div>
+            <div class="modal-body">
+                <form id="editWorkForm" class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Work Name <span class="text-red-500">*</span></label>
+                        <input type="text" id="editWorkName" required class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                    </div>
 
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Category</label>
-                    <select id="editWorkCategory" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-                        <!-- Categories will be populated here -->
-                    </select>
-                </div>
-                
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">WhatsApp Number</label>
-                    <input type="tel" id="editWhatsappNumber" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-                </div>
-                
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                    <textarea id="editWorkDescription" rows="4" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"></textarea>
-                </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Category</label>
+                        <select id="editWorkCategory" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <!-- Categories will be populated here -->
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">WhatsApp Number</label>
+                        <input type="tel" id="editWhatsappNumber" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                        <textarea id="editWorkDescription" rows="4" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"></textarea>
+                    </div>
 
-                <!-- MRP and Quotation Rate (Only in Edit Modal) -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">MRP</label>
-                        <input type="number" id="editWorkMrp" step="0.01" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Enter MRP">
+                    <!-- MRP and Quotation Rate (Only in Edit Modal) -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">MRP</label>
+                            <input type="number" id="editWorkMrp" step="0.01" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Enter MRP">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Quotation Rate</label>
+                            <input type="number" id="editWorkQuotationRate" step="0.01" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Enter quotation rate">
+                        </div>
                     </div>
+
+                    <!-- Edit Image Upload Section -->
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Quotation Rate</label>
-                        <input type="number" id="editWorkQuotationRate" step="0.01" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Enter quotation rate">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Attach Images</label>
+                        <div class="image-upload-area" id="editImageUploadArea" onclick="document.getElementById('editImageInput').click()">
+                            <input type="file" id="editImageInput" multiple accept="image/*" style="display: none;" onchange="handleEditImageUpload(event)">
+                            <svg class="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                            </svg>
+                            <p class="text-gray-600 mb-2">Click to upload additional images</p>
+                            <p class="text-sm text-gray-500">PNG, JPG, GIF up to 10MB each</p>
+                        </div>
+                        <div id="editImagePreviewContainer" class="mt-4 image-gallery">
+                            <!-- Existing and new image previews will be shown here -->
+                        </div>
                     </div>
-                </div>
-                
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Assign to Staff <span class="text-red-500">*</span></label>
-                    <select id="editAssignStaff" required class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-                        <option value="Irshad">Irshad</option>
-                        <option value="Niyas">Niyas</option>
-                        <option value="Muhammed">Muhammed</option>
-                        <option value="Najil">Najil</option>
-                        <option value="Safvan">Safvan</option>
-                    </select>
-                </div>
-                
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                    <select id="editWorkStatus" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-                        <option value="Pending">Pending</option>
-                        <option value="In Progress">In Progress</option>
-                        <option value="Completed">Completed</option>
-                    </select>
-                </div>
-                
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Deadline Date</label>
-                        <input type="date" id="editWorkDeadline" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Assign to Staff <span class="text-red-500">*</span></label>
+                        <select id="editAssignStaff" required class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <option value="Irshad">Irshad</option>
+                            <option value="Niyas">Niyas</option>
+                            <option value="Muhammed">Muhammed</option>
+                            <option value="Najil">Najil</option>
+                            <option value="Safvan">Safvan</option>
+                        </select>
                     </div>
+                    
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Deadline Time</label>
-                        <input type="time" id="editWorkDeadlineTime" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                        <select id="editWorkStatus" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <option value="Pending">Pending</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Proof">Proof</option>
+                            <option value="Completed">Completed</option>
+                        </select>
                     </div>
-                </div>
-                
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Priority</label>
-                    <select id="editWorkPriority" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-                        <option value="Low">Low</option>
-                        <option value="Medium">Medium</option>
-                        <option value="High">High</option>
-                    </select>
-                </div>
-                
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Deadline Date</label>
+                            <input type="date" id="editWorkDeadline" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Deadline Time</label>
+                            <input type="time" id="editWorkDeadlineTime" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+                        <select id="editWorkPriority" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <option value="Low">Low</option>
+                            <option value="Medium">Medium</option>
+                            <option value="High">High</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            
+            <div class="modal-footer">
                 <div class="flex gap-4">
                     <button type="button" onclick="closeEditModal()" class="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200">Cancel</button>
-                    <button type="submit" class="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:opacity-90 transition-all duration-300">Update Work</button>
+                    <button type="submit" form="editWorkForm" class="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:opacity-90 transition-all duration-300">Update Work</button>
                 </div>
-            </form>
+            </div>
         </div>
+    </div>
+
+    <!-- Image Viewer Modal -->
+    <div id="imageViewerModal" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4" onclick="closeImageViewer()">
+        <div class="max-w-4xl max-h-full">
+            <img id="imageViewerImg" src="" alt="Full size image" class="max-w-full max-h-full object-contain rounded-lg">
+        </div>
+        <button onclick="closeImageViewer()" class="absolute top-4 right-4 text-white bg-black bg-opacity-50 rounded-full p-2 hover:bg-opacity-75 transition-colors">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+        </button>
     </div>
 
     <!-- Delete Confirmation Modal -->
     <div id="deleteConfirmModal" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4">
-        <div class="modal-content rounded-2xl p-8 w-full max-w-md animate-scale-in">
-            <div class="text-center">
+        <div class="modal-content rounded-2xl w-full max-w-md animate-scale-in">
+            <div class="text-center p-8">
                 <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
                     <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
@@ -954,10 +1605,48 @@
         </div>
     </div>
 
+    <!-- Clear Notes Confirmation Modal -->
+    <div id="clearNotesModal" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4">
+        <div class="modal-content rounded-2xl w-full max-w-md animate-scale-in">
+            <div class="text-center p-8">
+                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                    <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                    </svg>
+                </div>
+                <h3 class="text-lg font-medium text-gray-900 mb-2">Clear All Notes</h3>
+                <p class="text-sm text-gray-500 mb-6">Are you sure you want to clear all your notes? This action cannot be undone.</p>
+                <div class="flex gap-3">
+                    <button onclick="closeClearNotesModal()" class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200">Cancel</button>
+                    <button onclick="confirmClearNotes()" class="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors duration-200">Clear All</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Clear Todos Confirmation Modal -->
+    <div id="clearTodosModal" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4">
+        <div class="modal-content rounded-2xl w-full max-w-md animate-scale-in">
+            <div class="text-center p-8">
+                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                    <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                    </svg>
+                </div>
+                <h3 class="text-lg font-medium text-gray-900 mb-2">Clear All To-Dos</h3>
+                <p class="text-sm text-gray-500 mb-6">Are you sure you want to clear all your to-do items? This action cannot be undone.</p>
+                <div class="flex gap-3">
+                    <button onclick="closeClearTodosModal()" class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200">Cancel</button>
+                    <button onclick="confirmClearTodos()" class="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors duration-200">Clear All</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Logout Confirmation Modal -->
     <div id="logoutConfirmModal" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4">
-        <div class="modal-content rounded-2xl p-8 w-full max-w-md animate-scale-in">
-            <div class="text-center">
+        <div class="modal-content rounded-2xl w-full max-w-md animate-scale-in">
+            <div class="text-center p-8">
                 <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-yellow-100 mb-4">
                     <svg class="h-6 w-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
@@ -968,25 +1657,6 @@
                 <div class="flex gap-3">
                     <button onclick="closeLogoutConfirmModal()" class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200">Cancel</button>
                     <button onclick="confirmLogout()" class="flex-1 px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors duration-200">Logout</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Unsaved Changes Confirmation Modal -->
-    <div id="unsavedChangesModal" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4">
-        <div class="modal-content rounded-2xl p-8 w-full max-w-md animate-scale-in">
-            <div class="text-center">
-                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-orange-100 mb-4">
-                    <svg class="h-6 w-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
-                    </svg>
-                </div>
-                <h3 class="text-lg font-medium text-gray-900 mb-2">Unsaved Changes</h3>
-                <p class="text-sm text-gray-500 mb-6">You have unsaved changes. Are you sure you want to close without saving?</p>
-                <div class="flex gap-3">
-                    <button onclick="closeUnsavedChangesModal()" class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200">Keep Editing</button>
-                    <button onclick="discardChanges()" class="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors duration-200">Discard Changes</button>
                 </div>
             </div>
         </div>
