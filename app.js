@@ -34,7 +34,7 @@ let currentFilters = {
     category: 'all'
 };
 let notificationsEnabled = false;
-let currentSearchTerm = '';
+let currentSearchTerm = ''; // UPDATED: For real-time search
 
 // Image upload variables
 let uploadedImages = [];
@@ -298,56 +298,10 @@ function toggleQuickTaskStaffDropdown() {
     toggleDropdown('quickTaskStaffDropdown', 'quickTaskStaffIcon');
 }
 
-// == UPDATED: REAL-TIME SEARCH FUNCTIONALITY (NO DROPDOWN) ==
-function handleRealTimeSearch(searchTerm) {
+// == UPDATED: REAL-TIME SEARCH FUNCTIONALITY ==
+function handleRealtimeSearch(searchTerm) {
     currentSearchTerm = searchTerm.toLowerCase().trim();
-    applySearchFilter();
-}
-
-function applySearchFilter() {
-    const workCards = document.querySelectorAll('.work-card');
-    
-    if (currentSearchTerm === '') {
-        // Show all cards when no search term
-        workCards.forEach(card => {
-            card.classList.remove('search-hidden');
-        });
-        return;
-    }
-    
-    // Filter works based on search term
-    let visibleCount = 0;
-    works.forEach((work, index) => {
-        const searchableFields = [
-            work.work_name?.toLowerCase() || '',
-            work.description?.toLowerCase() || '',
-            work.whatsapp_number?.toLowerCase() || '',
-            work.category?.toLowerCase() || '',
-            work.assigned_staff?.toLowerCase() || ''
-        ];
-        
-        const matches = searchableFields.some(field => 
-            field.includes(currentSearchTerm)
-        );
-        
-        const card = workCards[index];
-        if (card) {
-            if (matches) {
-                card.classList.remove('search-hidden');
-                visibleCount++;
-            } else {
-                card.classList.add('search-hidden');
-            }
-        }
-    });
-    
-    // Show/hide no results message
-    const noWorksElement = document.getElementById('noWorks');
-    if (visibleCount === 0 && currentSearchTerm !== '') {
-        noWorksElement?.classList.remove('hidden');
-    } else {
-        noWorksElement?.classList.add('hidden');
-    }
+    renderWorks(); // This will automatically filter and render works
 }
 
 // == PROFILE DROPDOWN ==
@@ -756,7 +710,7 @@ function filterCategories(searchTerm) {
         div.innerHTML = `
             <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
-            </svg>
+                </svg>
             ${category.name}
         `;
         categoryOptions.appendChild(div);
@@ -1034,8 +988,7 @@ function setupDropdownHandlers() {
     document.addEventListener('click', function(event) {
         if (!event.target.closest('.custom-dropdown') && 
             !event.target.closest('.status-dropdown') &&
-            !event.target.closest('.profile-dropdown') &&
-            !event.target.closest('.work-search-container')) {
+            !event.target.closest('.profile-dropdown')) {
             closeAllDropdowns();
             closeProfileDropdown(event);
         }
@@ -1171,7 +1124,7 @@ function clearAllFilters() {
         category: 'all'
     };
     
-    // Clear search
+    // Clear search term
     currentSearchTerm = '';
     document.getElementById('workSearchInput').value = '';
     
@@ -1297,7 +1250,7 @@ function toggleNotifications() {
     }
 }
 
-// == CONSOLE MESSAGES (REPLACING TOAST) ==
+// == CONSOLE MESSAGES (REPLACING TOASTS) ==
 function showConsoleMessage(message) {
     console.log(message);
 }
@@ -1357,7 +1310,6 @@ function executeLogout() {
     uploadedImages = [];
     editUploadedImages = [];
     currentWorkImages = [];
-    currentSearchTerm = '';
     
     document.getElementById('mainApp').classList.add('hidden');
     document.getElementById('loginScreen').classList.remove('hidden');
@@ -1444,8 +1396,20 @@ async function refreshWorks() {
     }
 }
 
+// == UPDATED: FILTER WORKS WITH SEARCH ==
 function filterWorks() {
     let filteredWorks = [...works];
+    
+    // Apply search filter first (only work name and description)
+    if (currentSearchTerm) {
+        filteredWorks = filteredWorks.filter(work => {
+            const workName = (work.work_name || '').toLowerCase();
+            const description = (work.description || '').toLowerCase();
+            
+            return workName.includes(currentSearchTerm) || 
+                   description.includes(currentSearchTerm);
+        });
+    }
     
     if (!showCompletedWorks) {
         filteredWorks = filteredWorks.filter(work => work.status !== 'Completed');
@@ -1528,12 +1492,9 @@ function renderWorks() {
     if (noWorks) noWorks.classList.add('hidden');
     
     container.innerHTML = filteredWorks.map(work => createWorkCard(work)).join('');
-    
-    // Apply search filter after rendering
-    applySearchFilter();
 }
 
-// == UPDATED: WORK CARD WITH NO POPUP ON STATUS CHANGE ==
+// == UPDATED: WORK CARD WITH FIXED STATUS DROPDOWN ==
 function createWorkCard(work) {
     const isOverdueWork = isOverdue(work);
     const deadlineText = formatDeadline(work);
@@ -1567,9 +1528,9 @@ function createWorkCard(work) {
     ` : '';
     
     return `
-        <div class="work-card p-6 animate-fade-in ${isOverdueWork ? 'ring-2 ring-red-200 bg-red-50' : ''}" data-work-id="${work.id}">
+        <div class="work-card p-6 animate-fade-in ${isOverdueWork ? 'ring-2 ring-red-200 bg-red-50' : ''}" onclick="showWorkDetails(${work.id})">
             <div class="flex justify-between items-start mb-4">
-                <div class="flex-1 min-w-0 pr-2" onclick="showWorkDetails(${work.id})">
+                <div class="flex-1 min-w-0 pr-2">
                     <h3 class="font-semibold text-gray-800 text-lg mb-1 truncate ${isOverdueWork ? 'text-red-800' : ''}">${work.work_name}</h3>
                     <p class="text-sm text-gray-600 mb-2 truncate">${work.category || 'No Category'}</p>
                 </div>
@@ -1585,7 +1546,7 @@ function createWorkCard(work) {
             
             ${imageThumbnail}
             
-            <div class="flex items-center justify-between mb-4" onclick="showWorkDetails(${work.id})">
+            <div class="flex items-center justify-between mb-4">
                 <div class="flex items-center gap-2 min-w-0 flex-1">
                     <img src="${avatar}" alt="${work.assigned_staff}" class="w-8 h-8 rounded-full object-cover flex-shrink-0">
                     <span class="text-sm font-medium text-gray-700 truncate">${work.assigned_staff}</span>
@@ -1595,7 +1556,7 @@ function createWorkCard(work) {
                 </span>
             </div>
             
-            <div class="flex items-center justify-between text-sm text-gray-500" onclick="showWorkDetails(${work.id})">
+            <div class="flex items-center justify-between text-sm text-gray-500">
                 <div class="flex items-center gap-4 min-w-0 flex-1">
                     <div class="flex items-center gap-1 ${isOverdueWork ? 'text-red-600 font-medium' : ''} min-w-0">
                         <svg class="w-4 h-4 ${isOverdueWork ? 'text-red-500' : ''} flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1639,8 +1600,9 @@ function createWorkCard(work) {
     `;
 }
 
-// == STATUS DROPDOWN WITH PROPER DROPDOWN FUNCTIONALITY ==
+// == STATUS DROPDOWN - UPDATED: NO POPUP ON STATUS CHANGE ==
 function showStatusDropdown(workId, currentStatus, buttonElement) {
+    // Remove any existing dropdowns
     document.querySelectorAll('.status-dropdown-menu').forEach(dropdown => {
         dropdown.remove();
     });
@@ -1657,7 +1619,7 @@ function showStatusDropdown(workId, currentStatus, buttonElement) {
     dropdown.className = 'status-dropdown-menu animate-slide-down';
     
     dropdown.innerHTML = statusOptions.map(option => `
-        <button onclick="changeWorkStatus(${workId}, '${option.value}'); this.closest('.status-dropdown-menu').remove();" 
+        <button onclick="changeWorkStatusOnly(${workId}, '${option.value}'); this.closest('.status-dropdown-menu').remove();" 
                 class="w-full text-left hover:bg-gray-50 transition-colors ${option.value === currentStatus ? 'bg-gray-100 font-medium' : ''}">
             <span>${option.icon}</span>
             <span class="px-2 py-1 rounded-full text-xs ${option.color}">${option.value}</span>
@@ -1678,8 +1640,8 @@ function showStatusDropdown(workId, currentStatus, buttonElement) {
     }, 100);
 }
 
-// == UPDATED: WORK ACTIONS - STATUS CHANGE WITHOUT POPUP ==
-async function changeWorkStatus(workId, newStatus) {
+// == UPDATED: STATUS CHANGE FUNCTION - NO POPUP ==
+async function changeWorkStatusOnly(workId, newStatus) {
     if (statusUpdateInProgress.has(workId)) return;
     
     statusUpdateInProgress.add(workId);
@@ -2092,6 +2054,15 @@ function resetForm() {
 }
 
 function showTab(tabName) {
+    // Clear search when switching tabs
+    if (tabName !== 'works') {
+        currentSearchTerm = '';
+        const searchInput = document.getElementById('workSearchInput');
+        if (searchInput) {
+            searchInput.value = '';
+        }
+    }
+    
     if (tabName !== 'dashboard') {
         showCompletedWorks = false;
     }
@@ -2133,7 +2104,7 @@ window.showTab = showTab;
 window.showWorkDetails = showWorkDetails;
 window.editWork = editWork;
 window.executeDeleteWork = executeDeleteWork;
-window.changeWorkStatus = changeWorkStatus;
+window.changeWorkStatusOnly = changeWorkStatusOnly;
 window.showStatusDropdown = showStatusDropdown;
 window.copyToClipboard = copyToClipboard;
 window.toggleNotifications = toggleNotifications;
@@ -2165,9 +2136,7 @@ window.toggleAssignStaffDropdown = toggleAssignStaffDropdown;
 window.togglePriorityDropdown = togglePriorityDropdown;
 window.toggleCategorySearchDropdown = toggleCategorySearchDropdown;
 window.toggleProfileDropdown = toggleProfileDropdown;
-
-// UPDATED: Real-time search function (no dropdown)
-window.handleRealTimeSearch = handleRealTimeSearch;
+window.handleRealtimeSearch = handleRealtimeSearch;
 
 // Quick tasks functions
 window.showAddQuickTaskModal = showAddQuickTaskModal;
