@@ -116,12 +116,12 @@
             z-index: 50;
             max-height: 15rem;
             overflow-y: auto;
-            scrollbar-width: none; /* Firefox */
-            -ms-overflow-style: none; /* Internet Explorer 10+ */
+            scrollbar-width: none;
+            -ms-overflow-style: none;
         }
         
         .dropdown-menu::-webkit-scrollbar {
-            display: none; /* WebKit */
+            display: none;
         }
         
         .dropdown-item {
@@ -215,7 +215,7 @@
             border: 1px solid #e5e7eb;
             border-radius: 0.75rem;
             box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            z-index: 50;
+            z-index: 60;
             min-width: 9rem;
             overflow: hidden;
         }
@@ -273,7 +273,10 @@
             transform: translateY(-1px);
         }
         
-        /* Fix overdue indicator to be visible */
+        .work-card.search-hidden {
+            display: none;
+        }
+        
         .overdue-indicator {
             position: absolute;
             top: -4px;
@@ -361,53 +364,65 @@
             box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
         }
         
-        /* Notes specific styles */
-        .notes-container {
-            min-height: calc(100vh - 200px);
-        }
-        
-        .notes-textarea {
-            min-height: 300px;
-            resize: vertical;
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
-            line-height: 1.6;
-        }
-        
-        .notes-textarea:focus {
-            outline: none;
-            ring: 2px;
-            ring-color: var(--color-primary);
-            ring-opacity: 0.2;
-        }
-        
-        /* Todo list styles */
-        .todo-item {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            padding: 0.75rem;
-            border: 1px solid #e5e7eb;
-            border-radius: 0.5rem;
+        /* Quick Task Styles */
+        .quick-task-card {
             background: white;
+            border-radius: 1rem;
+            border: 1px solid #e5e7eb;
+            padding: 1rem;
             transition: all 0.2s;
+            cursor: pointer;
         }
         
-        .todo-item:hover {
+        .quick-task-card:hover {
             border-color: var(--color-accent);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transform: translateY(-1px);
         }
         
-        .todo-item.completed {
+        .quick-task-card.completed {
             background: #f0f9ff;
             border-color: #0ea5e9;
         }
         
-        .todo-item.completed .todo-text {
+        .quick-task-card.completed .task-title {
             text-decoration: line-through;
             color: #6b7280;
         }
         
-        .todo-checkbox {
+        .quick-task-card.today {
+            border-left: 4px solid #f59e0b;
+            background: #fffbeb;
+        }
+        
+        .quick-task-card.tomorrow {
+            border-left: 4px solid #06b6d4;
+            background: #f0f9ff;
+        }
+        
+        .add-task-btn {
+            background: linear-gradient(135deg, var(--color-accent) 0%, #0891b2 100%);
+            color: white;
+            border: none;
+            border-radius: 1rem;
+            padding: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            min-height: 60px;
+            border: 2px dashed transparent;
+        }
+        
+        .add-task-btn:hover {
+            background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(6, 182, 212, 0.3);
+        }
+        
+        .task-checkbox {
             width: 20px;
             height: 20px;
             border: 2px solid #d1d5db;
@@ -417,42 +432,43 @@
             align-items: center;
             justify-content: center;
             transition: all 0.2s;
+            flex-shrink: 0;
         }
         
-        .todo-checkbox.checked {
+        .task-checkbox.checked {
             background: var(--color-accent);
             border-color: var(--color-accent);
             color: white;
         }
         
-        .todo-input {
-            border: 1px solid #d1d5db;
-            border-radius: 0.5rem;
-            padding: 0.75rem;
+        /* Work Search */
+        .work-search-container {
+            position: relative;
+            max-width: 400px;
+        }
+        
+        .work-search-input {
             width: 100%;
-            transition: border-color 0.2s;
-        }
-        
-        .todo-input:focus {
-            outline: none;
-            border-color: var(--color-accent);
-        }
-        
-        .add-todo-btn {
-            background: var(--color-accent);
-            color: white;
-            border: none;
-            border-radius: 0.5rem;
-            padding: 0.75rem 1rem;
-            cursor: pointer;
+            padding: 0.75rem 1rem 0.75rem 2.5rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.75rem;
+            background: white;
             transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
         }
         
-        .add-todo-btn:hover {
-            background: #0891b2;
+        .work-search-input:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            ring: 2px;
+            ring-color: rgba(99, 102, 241, 0.2);
+        }
+        
+        .search-icon {
+            position: absolute;
+            left: 0.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #6b7280;
         }
         
         /* Profile dropdown */
@@ -617,8 +633,8 @@
                 padding: 1rem;
             }
             
-            .notes-textarea {
-                min-height: 250px;
+            .work-search-container {
+                max-width: 100%;
             }
         }
         
@@ -769,12 +785,12 @@
                             </svg>
                             <span class="nav-tab-text">Add Work</span>
                         </button>
-                        <button onclick="showTab('notes')" id="notesTab" 
+                        <button onclick="showTab('tasks')" id="tasksTab" 
                                 class="nav-tab px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 text-gray-600 hover:text-gray-800 hover:bg-gray-100 flex items-center">
                             <svg class="w-4 h-4 nav-tab-icon mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
                             </svg>
-                            <span class="nav-tab-text">Notes</span>
+                            <span class="nav-tab-text">Quick Tasks</span>
                         </button>
                     </div>
 
@@ -899,7 +915,7 @@
                     </div>
                 </div>
 
-                <!-- Quick Actions with fixed layout -->
+                <!-- Quick Actions -->
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 grid-mobile-1">
                     <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 p-mobile-sm">
                         <h3 class="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h3>
@@ -924,13 +940,13 @@
                                 </div>
                             </button>
 
-                            <button onclick="showTab('notes')" class="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 transition-all duration-300 card-hover">
+                            <button onclick="showTab('tasks')" class="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 transition-all duration-300 card-hover">
                                 <svg class="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
                                 </svg>
                                 <div class="text-left">
-                                    <div class="font-semibold">Quick Notes</div>
-                                    <div class="text-sm opacity-90">Write important things and ideas</div>
+                                    <div class="font-semibold">Quick Tasks</div>
+                                    <div class="text-sm opacity-90">Manage short-term tasks and notes</div>
                                 </div>
                             </button>
                         </div>
@@ -949,18 +965,26 @@
         <!-- Enhanced All Works Tab -->
         <div id="worksContent" class="tab-content hidden">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <!-- Filters -->
+                <!-- Search and Filters -->
                 <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 mb-6 p-mobile-sm">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-lg font-semibold text-gray-800">Filter Works</h3>
-                        <button onclick="clearAllFilters()" class="clear-filters-btn flex items-center gap-2">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                            </svg>
-                            Clear All Filters
-                        </button>
+                    <!-- UPDATED: Real-time Search Bar (No Dropdown) -->
+                    <div class="mb-6">
+                        <div class="work-search-container mx-auto">
+                            <div class="relative">
+                                <svg class="search-icon w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                </svg>
+                                <input 
+                                    type="text" 
+                                    id="workSearchInput"
+                                    class="work-search-input" 
+                                    placeholder="Search works by name, description, or phone number..."
+                                    oninput="handleRealTimeSearch(this.value)"
+                                />
+                            </div>
+                        </div>
                     </div>
-                    
+
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 grid-mobile-1">
                         <!-- Status Filter -->
                         <div class="custom-dropdown">
@@ -976,6 +1000,7 @@
                                 <div class="dropdown-item" onclick="selectStatusFilter('Pending')">Pending</div>
                                 <div class="dropdown-item" onclick="selectStatusFilter('In Progress')">In Progress</div>
                                 <div class="dropdown-item" onclick="selectStatusFilter('Proof')">Proof</div>
+                                <div class="dropdown-item" onclick="selectStatusFilter('Unpaid')">Unpaid</div>
                                 <div class="dropdown-item" onclick="selectStatusFilter('Completed')">Completed</div>
                             </div>
                         </div>
@@ -1016,22 +1041,14 @@
                             </div>
                         </div>
                         
-                        <!-- Sort Filter -->
-                        <div class="custom-dropdown">
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Sort by:</label>
-                            <button id="sortFilterButton" onclick="toggleSortDropdown()" class="dropdown-button">
-                                <span id="sortFilterText">Overdue & Pending First</span>
-                                <svg class="w-5 h-5 text-gray-400 transition-transform" id="sortFilterIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        <!-- Clear All Filters Button -->
+                        <div class="flex items-end">
+                            <button onclick="clearAllFilters()" class="clear-filters-btn w-full flex items-center justify-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                                 </svg>
+                                Clear All Filters
                             </button>
-                            <div id="sortDropdown" class="dropdown-menu hidden animate-slide-down">
-                                <div class="dropdown-item" onclick="selectSortFilter('overdue_pending')">Overdue & Pending First</div>
-                                <div class="dropdown-item" onclick="selectSortFilter('newest')">Newest First</div>
-                                <div class="dropdown-item" onclick="selectSortFilter('oldest')">Oldest First</div>
-                                <div class="dropdown-item" onclick="selectSortFilter('deadline')">Deadline</div>
-                                <div class="dropdown-item" onclick="selectSortFilter('status')">Status</div>
-                            </div>
                         </div>
                     </div>
 
@@ -1096,8 +1113,8 @@
                     <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
                     </svg>
-                    <p class="text-gray-500 text-lg mb-2">No works match your current filter criteria</p>
-                    <p class="text-gray-400">Try adjusting your filters or add a new work</p>
+                    <p class="text-gray-500 text-lg mb-2">No works match your current criteria</p>
+                    <p class="text-gray-400">Try adjusting your filters or search terms</p>
                 </div>
             </div>
         </div>
@@ -1160,11 +1177,27 @@
                             </div>
                         </div>
 
-                        <!-- Image Upload Section -->
+                        <!-- Image Upload Section with Camera Option -->
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Attach Images</label>
+                            <div class="flex gap-4 mb-4">
+                                <button type="button" onclick="document.getElementById('imageInput').click()" class="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                    Choose Files
+                                </button>
+                                <button type="button" onclick="document.getElementById('cameraInput').click()" class="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                    </svg>
+                                    Take Photo
+                                </button>
+                            </div>
+                            <input type="file" id="imageInput" multiple accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
+                            <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display: none;" onchange="handleImageUpload(event)">
                             <div class="image-upload-area" id="imageUploadArea" onclick="document.getElementById('imageInput').click()">
-                                <input type="file" id="imageInput" multiple accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
                                 <svg class="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
                                 </svg>
@@ -1260,143 +1293,123 @@
             </div>
         </div>
 
-        <!-- Enhanced Notes Tab -->
-        <div id="notesContent" class="tab-content hidden">
+        <!-- RECREATED Quick Tasks Tab -->
+        <div id="tasksContent" class="tab-content hidden">
             <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 grid-mobile-1">
-                    <!-- Notes Section -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 notes-container p-mobile-sm">
-                        <div class="border-b border-gray-200 p-6">
-                            <div class="flex items-center justify-between">
-                                <div>
-                                    <h2 class="text-2xl font-bold text-gray-800">Quick Notes</h2>
-                                    <p class="text-gray-600 mt-1">Write important things and ideas. Auto-saves as you type.</p>
-                                </div>
-                                <div class="flex items-center gap-3">
-                                    <div id="notesLastSaved" class="text-sm text-gray-500">
-                                        <!-- Last saved time will be shown here -->
-                                    </div>
-                                    <div class="flex items-center gap-2">
-                                        <div id="notesSaveIndicator" class="hidden">
-                                            <div class="loading-spinner"></div>
-                                        </div>
-                                        <button onclick="clearNotes()" class="px-3 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors">
-                                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                            </svg>
-                                            Clear All
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                <div class="mb-8">
+                    <h1 class="text-3xl font-bold text-gray-800 mb-2">Quick Tasks</h1>
+                    <p class="text-gray-600">Manage short-term tasks and quick notes efficiently</p>
+                </div>
 
-                        <div class="p-6">
-                            <div class="relative">
-                                <textarea 
-                                    id="notesTextarea" 
-                                    class="notes-textarea w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent resize-vertical"
-                                    placeholder="Start typing your notes here... Your notes will be automatically saved as you type.
+                <!-- Tasks Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" id="quickTasksContainer">
+                    <!-- Add Task Button -->
+                    <div class="add-task-btn" onclick="showAddQuickTaskModal()">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                        </svg>
+                        <span class="font-semibold">Add Quick Task</span>
+                    </div>
+                    
+                    <!-- Quick tasks will be populated here -->
+                </div>
 
-You can write:
-• Important reminders
-• Client details and requirements
-• Project ideas and brainstorming
-• Meeting notes
-• Contact information
-• Quick thoughts and ideas
+                <!-- Empty State -->
+                <div id="noQuickTasks" class="hidden text-center py-16">
+                    <svg class="w-20 h-20 text-gray-300 mx-auto mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
+                    </svg>
+                    <h3 class="text-xl font-semibold text-gray-500 mb-2">No Quick Tasks Yet</h3>
+                    <p class="text-gray-400 mb-6">Start by adding your first quick task using the button above</p>
+                </div>
+            </div>
+        </div>
+    </div>
 
-Everything is saved automatically - no need to worry about losing your work!"
-                                    oninput="handleNotesInput()"
-                                    onpaste="handleNotesInput()"
-                                    oncut="handleNotesInput()">
-                                </textarea>
-                                
-                                <div class="absolute bottom-2 right-2 bg-white bg-opacity-75 px-2 py-1 rounded text-xs text-gray-500">
-                                    <span id="characterCount">0</span> characters
-                                </div>
-                            </div>
-                            
-                            <div class="mt-4 flex items-center justify-between text-sm text-gray-500">
-                                <div class="flex items-center gap-4">
-                                    <span>📝 Lines: <span id="lineCount">0</span></span>
-                                    <span>📊 Words: <span id="wordCount">0</span></span>
-                                    <span>⏱️ Auto-save: <span id="notesAutoSaveStatus">Ready</span></span>
-                                </div>
-                                <div class="flex items-center gap-2">
-                                    <button onclick="copyNotesToClipboard()" class="px-3 py-1 text-green-600 hover:text-green-700 hover:bg-green-50 rounded transition-colors">
-                                        <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                                        </svg>
-                                        Copy
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+    <!-- Add Quick Task Modal -->
+    <div id="addQuickTaskModal" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4" onclick="closeAddQuickTaskModal(event)">
+        <div class="modal-content rounded-2xl w-full max-w-md animate-scale-in" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-2xl font-bold text-gray-800">Add Quick Task</h2>
+                    <button onclick="closeAddQuickTaskModal()" class="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-full transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="modal-body">
+                <form id="addQuickTaskForm" class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Task Name <span class="text-red-500">*</span></label>
+                        <input type="text" id="quickTaskName" required class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Enter task name">
                     </div>
 
-                    <!-- To-Do Section -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 notes-container p-mobile-sm">
-                        <div class="border-b border-gray-200 p-6">
-                            <div class="flex items-center justify-between">
-                                <div>
-                                    <h2 class="text-2xl font-bold text-gray-800">To-Do List</h2>
-                                    <p class="text-gray-600 mt-1">Keep track of your tasks and priorities.</p>
-                                </div>
-                                <div class="flex items-center gap-3">
-                                    <div id="todoLastSaved" class="text-sm text-gray-500">
-                                        <!-- Last saved time will be shown here -->
-                                    </div>
-                                    <div class="flex items-center gap-2">
-                                        <div id="todoSaveIndicator" class="hidden">
-                                            <div class="loading-spinner"></div>
-                                        </div>
-                                        <button onclick="clearTodos()" class="px-3 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors">
-                                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                            </svg>
-                                            Clear All
-                                        </button>
-                                    </div>
-                                </div>
+                    <div class="custom-dropdown">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Assigned Staff <span class="text-red-500">*</span></label>
+                        <button type="button" id="quickTaskStaffButton" onclick="toggleQuickTaskStaffDropdown()" class="dropdown-button">
+                            <span id="quickTaskStaffText">Select Staff Member</span>
+                            <svg class="w-5 h-5 text-gray-400 transition-transform" id="quickTaskStaffIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </button>
+                        <div id="quickTaskStaffDropdown" class="dropdown-menu hidden animate-slide-down">
+                            <div class="dropdown-item" onclick="selectQuickTaskStaff('Irshad')">
+                                <img src="irshad.jpg" alt="Irshad" class="w-6 h-6 rounded-full object-cover">
+                                Irshad
+                            </div>
+                            <div class="dropdown-item" onclick="selectQuickTaskStaff('Niyas')">
+                                <img src="niyas.jpg" alt="Niyas" class="w-6 h-6 rounded-full object-cover">
+                                Niyas
+                            </div>
+                            <div class="dropdown-item" onclick="selectQuickTaskStaff('Muhammed')">
+                                <img src="muhammed.jpg" alt="Muhammed" class="w-6 h-6 rounded-full object-cover">
+                                Muhammed
+                            </div>
+                            <div class="dropdown-item" onclick="selectQuickTaskStaff('Najil')">
+                                <img src="najil.jpg" alt="Najil" class="w-6 h-6 rounded-full object-cover">
+                                Najil
+                            </div>
+                            <div class="dropdown-item" onclick="selectQuickTaskStaff('Safvan')">
+                                <img src="safvan.jpg" alt="Safvan" class="w-6 h-6 rounded-full object-cover">
+                                Safvan
                             </div>
                         </div>
-
-                        <div class="p-6">
-                            <!-- Add Todo Form -->
-                            <div class="mb-6">
-                                <div class="flex gap-2">
-                                    <input 
-                                        type="text" 
-                                        id="newTodoInput" 
-                                        class="todo-input flex-1" 
-                                        placeholder="Add a new task..."
-                                        onkeypress="handleTodoKeyPress(event)"
-                                    />
-                                    <button onclick="addTodo()" class="add-todo-btn">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                                        </svg>
-                                        Add
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- Todo Items -->
-                            <div id="todosList" class="space-y-3 max-h-96 overflow-y-auto">
-                                <!-- Todo items will be populated here -->
-                            </div>
-
-                            <!-- Todo Stats -->
-                            <div class="mt-4 flex items-center justify-between text-sm text-gray-500 pt-4 border-t">
-                                <div class="flex items-center gap-4">
-                                    <span>📋 Total: <span id="totalTodos">0</span></span>
-                                    <span>✅ Completed: <span id="completedTodos">0</span></span>
-                                    <span>⏱️ Auto-save: <span id="todoAutoSaveStatus">Ready</span></span>
-                                </div>
-                            </div>
-                        </div>
+                        <input type="hidden" id="quickTaskStaff" required>
                     </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-3">Due Date (Optional)</label>
+                        <div class="flex gap-3">
+                            <button type="button" onclick="setQuickTaskDate('today')" id="todayBtn" class="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                </svg>
+                                Today
+                            </button>
+                            <button type="button" onclick="setQuickTaskDate('tomorrow')" id="tomorrowBtn" class="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                </svg>
+                                Tomorrow
+                            </button>
+                            <button type="button" onclick="clearQuickTaskDate()" id="clearDateBtn" class="px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <input type="hidden" id="quickTaskDate">
+                    </div>
+                </form>
+            </div>
+            
+            <div class="modal-footer">
+                <div class="flex gap-3">
+                    <button type="button" onclick="closeAddQuickTaskModal()" class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200">Cancel</button>
+                    <button type="submit" form="addQuickTaskForm" class="flex-1 px-4 py-2 bg-gradient-to-r from-accent to-green-500 text-white rounded-lg hover:opacity-90 transition-all duration-300">Add Task</button>
                 </div>
             </div>
         </div>
@@ -1456,7 +1469,7 @@ Everything is saved automatically - no need to worry about losing your work!"
         </div>
     </div>
 
-    <!-- Edit Work Modal with fixed footer -->
+    <!-- Edit Work Modal -->
     <div id="editWorkModal" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4" onclick="closeEditModal(event)">
         <div class="modal-content rounded-2xl w-full max-w-2xl animate-scale-in" onclick="event.stopPropagation()">
             <div class="modal-header">
@@ -1494,7 +1507,7 @@ Everything is saved automatically - no need to worry about losing your work!"
                         <textarea id="editWorkDescription" rows="4" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"></textarea>
                     </div>
 
-                    <!-- MRP and Quotation Rate (Only in Edit Modal) -->
+                    <!-- MRP and Quotation Rate -->
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">MRP</label>
@@ -1506,17 +1519,26 @@ Everything is saved automatically - no need to worry about losing your work!"
                         </div>
                     </div>
 
-                    <!-- Edit Image Upload Section -->
+                    <!-- Edit Image Upload Section with Camera Option -->
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-2">Attach Images</label>
-                        <div class="image-upload-area" id="editImageUploadArea" onclick="document.getElementById('editImageInput').click()">
-                            <input type="file" id="editImageInput" multiple accept="image/*" style="display: none;" onchange="handleEditImageUpload(event)">
-                            <svg class="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-                            </svg>
-                            <p class="text-gray-600 mb-2">Click to upload additional images</p>
-                            <p class="text-sm text-gray-500">PNG, JPG, GIF up to 10MB each</p>
+                        <div class="flex gap-4 mb-4">
+                            <button type="button" onclick="document.getElementById('editImageInput').click()" class="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                </svg>
+                                Choose Files
+                            </button>
+                            <button type="button" onclick="document.getElementById('editCameraInput').click()" class="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                </svg>
+                                Take Photo
+                            </button>
                         </div>
+                        <input type="file" id="editImageInput" multiple accept="image/*" style="display: none;" onchange="handleEditImageUpload(event)">
+                        <input type="file" id="editCameraInput" accept="image/*" capture="environment" style="display: none;" onchange="handleEditImageUpload(event)">
                         <div id="editImagePreviewContainer" class="mt-4 image-gallery">
                             <!-- Existing and new image previews will be shown here -->
                         </div>
@@ -1539,6 +1561,7 @@ Everything is saved automatically - no need to worry about losing your work!"
                             <option value="Pending">Pending</option>
                             <option value="In Progress">In Progress</option>
                             <option value="Proof">Proof</option>
+                            <option value="Unpaid">Unpaid</option>
                             <option value="Completed">Completed</option>
                         </select>
                     </div>
@@ -1605,44 +1628,6 @@ Everything is saved automatically - no need to worry about losing your work!"
         </div>
     </div>
 
-    <!-- Clear Notes Confirmation Modal -->
-    <div id="clearNotesModal" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4">
-        <div class="modal-content rounded-2xl w-full max-w-md animate-scale-in">
-            <div class="text-center p-8">
-                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
-                    <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                    </svg>
-                </div>
-                <h3 class="text-lg font-medium text-gray-900 mb-2">Clear All Notes</h3>
-                <p class="text-sm text-gray-500 mb-6">Are you sure you want to clear all your notes? This action cannot be undone.</p>
-                <div class="flex gap-3">
-                    <button onclick="closeClearNotesModal()" class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200">Cancel</button>
-                    <button onclick="confirmClearNotes()" class="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors duration-200">Clear All</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Clear Todos Confirmation Modal -->
-    <div id="clearTodosModal" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4">
-        <div class="modal-content rounded-2xl w-full max-w-md animate-scale-in">
-            <div class="text-center p-8">
-                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
-                    <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                    </svg>
-                </div>
-                <h3 class="text-lg font-medium text-gray-900 mb-2">Clear All To-Dos</h3>
-                <p class="text-sm text-gray-500 mb-6">Are you sure you want to clear all your to-do items? This action cannot be undone.</p>
-                <div class="flex gap-3">
-                    <button onclick="closeClearTodosModal()" class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200">Cancel</button>
-                    <button onclick="confirmClearTodos()" class="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors duration-200">Clear All</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Logout Confirmation Modal -->
     <div id="logoutConfirmModal" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4">
         <div class="modal-content rounded-2xl w-full max-w-md animate-scale-in">
@@ -1653,7 +1638,7 @@ Everything is saved automatically - no need to worry about losing your work!"
                     </svg>
                 </div>
                 <h3 class="text-lg font-medium text-gray-900 mb-2">Logout</h3>
-                <p class="text-sm text-gray-500 mb-6">Are you sure you want to logout? You'll need to select your profile again to continue.</p>
+                <p class="text-sm text-gray-500 mb-6">Are you sure you want to logout? Your work will be saved automatically.</p>
                 <div class="flex gap-3">
                     <button onclick="closeLogoutConfirmModal()" class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200">Cancel</button>
                     <button onclick="confirmLogout()" class="flex-1 px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors duration-200">Logout</button>
@@ -1661,9 +1646,6 @@ Everything is saved automatically - no need to worry about losing your work!"
             </div>
         </div>
     </div>
-
-    <!-- Toast Container -->
-    <div id="toastContainer" class="fixed top-4 right-4 z-50 space-y-2"></div>
 
     <script src="app.js"></script>
 </body>
