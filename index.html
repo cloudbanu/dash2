@@ -273,10 +273,6 @@
             transform: translateY(-1px);
         }
         
-        .work-card.search-hidden {
-            display: none;
-        }
-        
         .overdue-indicator {
             position: absolute;
             top: -4px;
@@ -441,7 +437,7 @@
             color: white;
         }
         
-        /* Work Search */
+        /* UPDATED: Work Search - removed dropdown styles */
         .work-search-container {
             position: relative;
             max-width: 400px;
@@ -967,7 +963,7 @@
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 <!-- Search and Filters -->
                 <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 mb-6 p-mobile-sm">
-                    <!-- UPDATED: Real-time Search Bar (No Dropdown) -->
+                    <!-- UPDATED: Search Bar - removed dropdown, now filters in real-time -->
                     <div class="mb-6">
                         <div class="work-search-container mx-auto">
                             <div class="relative">
@@ -978,8 +974,8 @@
                                     type="text" 
                                     id="workSearchInput"
                                     class="work-search-input" 
-                                    placeholder="Search works by name, description, or phone number..."
-                                    oninput="handleRealTimeSearch(this.value)"
+                                    placeholder="Search works by name or description..."
+                                    oninput="handleRealtimeSearch(this.value)"
                                 />
                             </div>
                         </div>
@@ -1043,7 +1039,7 @@
                         
                         <!-- Clear All Filters Button -->
                         <div class="flex items-end">
-                            <button onclick="clearAllFilters()" class="clear-filters-btn w-full flex items-center justify-center gap-2">
+                            <button onclick="clearAllFilters()" class="clear-filters-btn w-full h-14 flex items-center justify-center gap-2">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                                 </svg>
