@@ -17,8 +17,10 @@ const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // == Global State ==
 let currentUser = null;
 let currentUserRole = null;
+let sessionId = null;
 let works = [];
 let categories = [];
+let quickTasks = [];
 let currentWorkId = null;
 let editingWorkId = null;
 let deleteWorkId = null;
@@ -29,28 +31,14 @@ let currentFilters = {
     status: 'all', 
     deadline: 'all',
     creator: 'all',
-    category: 'all',
-    sort: 'overdue_pending'
+    category: 'all'
 };
 let notificationsEnabled = false;
-let hasUnsavedChanges = false;
-let pendingModalClose = null;
-
-// Notes and Todos functionality (user-specific)
-let notesAutoSaveTimeout = null;
-let currentNotes = '';
-let lastSavedNotes = '';
-let isSavingNotes = false;
-
-let todoAutoSaveTimeout = null;
-let todoItems = [];
-let isSavingTodos = false;
+let currentSearchTerm = '';
 
 // Image upload variables
 let uploadedImages = [];
 let editUploadedImages = [];
-
-// Global variable to store current work images for editing
 let currentWorkImages = [];
 
 // == INITIALIZATION ==
@@ -58,21 +46,16 @@ document.addEventListener('DOMContentLoaded', async function() {
     updateDateTime();
     setInterval(updateDateTime, 1000);
     
-    // Register service worker for PWA
+    sessionId = generateSessionId();
+    
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('sw.js').catch(err => console.log('SW registration failed'));
     }
     
-    // Request notification permission
     await requestNotificationPermission();
-    
-    // Set up keyboard event listeners
     setupKeyboardEventListeners();
-    
-    // Set up drag and drop for image upload
     setupImageUpload();
     
-    // Check if user was previously logged in
     const savedUser = localStorage.getItem('currentUser');
     const savedRole = localStorage.getItem('currentUserRole');
     
@@ -85,19 +68,16 @@ document.addEventListener('DOMContentLoaded', async function() {
         document.getElementById('profileUserName').textContent = savedUser;
         document.getElementById('userAvatar').src = memberAvatars[savedUser];
         
-        // Initialize app data
         await Promise.all([
             refreshWorks(),
             refreshCategories(),
-            loadNotes(),
-            loadTodos()
+            refreshQuickTasks()
         ]);
         
         setupMemberFilters();
         subscribeToWorks();
         subscribeToNotifications();
-        subscribeToNotes();
-        subscribeToTodos();
+        subscribeToQuickTasks();
         
         renderWorks();
         updateStats();
@@ -105,19 +85,276 @@ document.addEventListener('DOMContentLoaded', async function() {
         showTab('dashboard');
     }
 
-    // Set up dropdown click handlers
     setupDropdownHandlers();
-    
-    // Set up form handlers
     setupFormHandlers();
 });
+
+// == SESSION MANAGEMENT ==
+function generateSessionId() {
+    return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+}
+
+// == QUICK TASKS FUNCTIONALITY ==
+async function refreshQuickTasks() {
+    try {
+        const { data, error } = await supabase
+            .from('quick_tasks')
+            .select('*')
+            .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        quickTasks = data || [];
+        
+        renderQuickTasks();
+    } catch (error) {
+        console.error('Error fetching quick tasks:', error);
+        showConsoleMessage('❌ Failed to refresh quick tasks');
+    }
+}
+
+function renderQuickTasks() {
+    const container = document.getElementById('quickTasksContainer');
+    if (!container) return;
+    
+    const addButton = container.querySelector('.add-task-btn');
+    container.innerHTML = '';
+    if (addButton) {
+        container.appendChild(addButton);
+    }
+    
+    if (quickTasks.length === 0) {
+        document.getElementById('noQuickTasks')?.classList.remove('hidden');
+        return;
+    }
+    
+    document.getElementById('noQuickTasks')?.classList.add('hidden');
+    
+    const today = new Date().toDateString();
+    const tomorrow = new Date(Date.now() + 86400000).toDateString();
+    
+    quickTasks.forEach(task => {
+        const taskCard = createQuickTaskCard(task, today, tomorrow);
+        container.appendChild(taskCard);
+    });
+}
+
+function createQuickTaskCard(task, today, tomorrow) {
+    const div = document.createElement('div');
+    const avatar = memberAvatars[task.assigned_staff] || 'default-avatar.jpg';
+    
+    let cardClass = 'quick-task-card';
+    let dueDateText = '';
+    
+    if (task.completed) {
+        cardClass += ' completed';
+    }
+    
+    if (task.due_date) {
+        const taskDate = new Date(task.due_date).toDateString();
+        if (taskDate === today) {
+            cardClass += ' today';
+            dueDateText = '📅 Today';
+        } else if (taskDate === tomorrow) {
+            cardClass += ' tomorrow';
+            dueDateText = '🗓️ Tomorrow';
+        } else {
+            dueDateText = `📆 ${new Date(task.due_date).toLocaleDateString()}`;
+        }
+    }
+    
+    div.className = cardClass;
+    div.innerHTML = `
+        <div class="flex items-start justify-between mb-3">
+            <div class="task-checkbox ${task.completed ? 'checked' : ''}" onclick="toggleQuickTask(${task.id})">
+                ${task.completed ? '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>' : ''}
+            </div>
+            <button onclick="deleteQuickTask(${task.id})" class="text-gray-400 hover:text-red-500 p-1 rounded transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                </svg>
+            </button>
+        </div>
+        
+        <h3 class="task-title font-semibold text-gray-800 mb-3">${task.task_name}</h3>
+        
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <img src="${avatar}" alt="${task.assigned_staff}" class="w-6 h-6 rounded-full object-cover">
+                <span class="text-sm text-gray-600">${task.assigned_staff}</span>
+            </div>
+            ${dueDateText ? `<span class="text-xs text-gray-500">${dueDateText}</span>` : ''}
+        </div>
+        
+        <div class="mt-2 text-xs text-gray-400">
+            Created ${formatRelativeTime(task.created_at)}
+        </div>
+    `;
+    
+    return div;
+}
+
+async function toggleQuickTask(taskId) {
+    try {
+        const task = quickTasks.find(t => t.id === taskId);
+        if (!task) return;
+        
+        const { error } = await supabase
+            .from('quick_tasks')
+            .update({ completed: !task.completed })
+            .eq('id', taskId);
+        
+        if (error) throw error;
+        
+        task.completed = !task.completed;
+        renderQuickTasks();
+        
+        showConsoleMessage(task.completed ? '✅ Task completed!' : '🔄 Task marked as pending');
+    } catch (error) {
+        console.error('Error updating task:', error);
+        showConsoleMessage('❌ Failed to update task');
+    }
+}
+
+async function deleteQuickTask(taskId) {
+    if (!confirm('Are you sure you want to delete this task?')) return;
+    
+    try {
+        const { error } = await supabase
+            .from('quick_tasks')
+            .delete()
+            .eq('id', taskId);
+        
+        if (error) throw error;
+        
+        quickTasks = quickTasks.filter(t => t.id !== taskId);
+        renderQuickTasks();
+        
+        showConsoleMessage('🗑️ Task deleted successfully');
+    } catch (error) {
+        console.error('Error deleting task:', error);
+        showConsoleMessage('❌ Failed to delete task');
+    }
+}
+
+// == QUICK TASK MODAL FUNCTIONS ==
+function showAddQuickTaskModal() {
+    resetQuickTaskForm();
+    document.getElementById('addQuickTaskModal').classList.remove('hidden');
+    setTimeout(() => {
+        document.getElementById('quickTaskName').focus();
+    }, 100);
+}
+
+function closeAddQuickTaskModal(event) {
+    if (event && event.target !== event.currentTarget) return;
+    document.getElementById('addQuickTaskModal').classList.add('hidden');
+    resetQuickTaskForm();
+}
+
+function resetQuickTaskForm() {
+    document.getElementById('addQuickTaskForm').reset();
+    document.getElementById('quickTaskStaffText').textContent = 'Select Staff Member';
+    document.getElementById('quickTaskStaff').value = '';
+    document.getElementById('quickTaskDate').value = '';
+    clearQuickTaskDateButtons();
+}
+
+function selectQuickTaskStaff(staffName) {
+    document.getElementById('quickTaskStaff').value = staffName;
+    document.getElementById('quickTaskStaffText').textContent = staffName;
+    closeAllDropdowns();
+}
+
+function setQuickTaskDate(type) {
+    clearQuickTaskDateButtons();
+    
+    const today = new Date();
+    let targetDate;
+    
+    if (type === 'today') {
+        targetDate = today;
+        document.getElementById('todayBtn').classList.add('bg-yellow-100', 'border-yellow-300', 'text-yellow-800');
+    } else if (type === 'tomorrow') {
+        targetDate = new Date(today.getTime() + 86400000);
+        document.getElementById('tomorrowBtn').classList.add('bg-blue-100', 'border-blue-300', 'text-blue-800');
+    }
+    
+    document.getElementById('quickTaskDate').value = targetDate.toISOString().split('T')[0];
+}
+
+function clearQuickTaskDate() {
+    document.getElementById('quickTaskDate').value = '';
+    clearQuickTaskDateButtons();
+}
+
+function clearQuickTaskDateButtons() {
+    ['todayBtn', 'tomorrowBtn'].forEach(id => {
+        const btn = document.getElementById(id);
+        btn.classList.remove('bg-yellow-100', 'border-yellow-300', 'text-yellow-800', 'bg-blue-100', 'border-blue-300', 'text-blue-800');
+    });
+}
+
+function toggleQuickTaskStaffDropdown() {
+    toggleDropdown('quickTaskStaffDropdown', 'quickTaskStaffIcon');
+}
+
+// == UPDATED: REAL-TIME SEARCH FUNCTIONALITY (NO DROPDOWN) ==
+function handleRealTimeSearch(searchTerm) {
+    currentSearchTerm = searchTerm.toLowerCase().trim();
+    applySearchFilter();
+}
+
+function applySearchFilter() {
+    const workCards = document.querySelectorAll('.work-card');
+    
+    if (currentSearchTerm === '') {
+        // Show all cards when no search term
+        workCards.forEach(card => {
+            card.classList.remove('search-hidden');
+        });
+        return;
+    }
+    
+    // Filter works based on search term
+    let visibleCount = 0;
+    works.forEach((work, index) => {
+        const searchableFields = [
+            work.work_name?.toLowerCase() || '',
+            work.description?.toLowerCase() || '',
+            work.whatsapp_number?.toLowerCase() || '',
+            work.category?.toLowerCase() || '',
+            work.assigned_staff?.toLowerCase() || ''
+        ];
+        
+        const matches = searchableFields.some(field => 
+            field.includes(currentSearchTerm)
+        );
+        
+        const card = workCards[index];
+        if (card) {
+            if (matches) {
+                card.classList.remove('search-hidden');
+                visibleCount++;
+            } else {
+                card.classList.add('search-hidden');
+            }
+        }
+    });
+    
+    // Show/hide no results message
+    const noWorksElement = document.getElementById('noWorks');
+    if (visibleCount === 0 && currentSearchTerm !== '') {
+        noWorksElement?.classList.remove('hidden');
+    } else {
+        noWorksElement?.classList.add('hidden');
+    }
+}
 
 // == PROFILE DROPDOWN ==
 function toggleProfileDropdown() {
     const dropdown = document.getElementById('profileDropdownMenu');
     if (dropdown.classList.contains('hidden')) {
         dropdown.classList.remove('hidden');
-        // Close dropdown when clicking outside
         setTimeout(() => {
             document.addEventListener('click', closeProfileDropdown);
         }, 100);
@@ -139,18 +376,11 @@ function closeProfileDropdown(event) {
 // == IMAGE UPLOAD FUNCTIONALITY ==
 function setupImageUpload() {
     const uploadArea = document.getElementById('imageUploadArea');
-    const editUploadArea = document.getElementById('editImageUploadArea');
     
     if (uploadArea) {
         uploadArea.addEventListener('dragover', handleDragOver);
         uploadArea.addEventListener('dragleave', handleDragLeave);
         uploadArea.addEventListener('drop', handleDrop);
-    }
-    
-    if (editUploadArea) {
-        editUploadArea.addEventListener('dragover', handleDragOver);
-        editUploadArea.addEventListener('dragleave', handleDragLeave);
-        editUploadArea.addEventListener('drop', handleEditDrop);
     }
 }
 
@@ -169,13 +399,6 @@ function handleDrop(e) {
     e.currentTarget.classList.remove('dragover');
     const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
     processImages(files, false);
-}
-
-function handleEditDrop(e) {
-    e.preventDefault();
-    e.currentTarget.classList.remove('dragover');
-    const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
-    processImages(files, true);
 }
 
 function handleImageUpload(event) {
@@ -203,24 +426,21 @@ async function processImages(files, isEdit = false) {
     let processedFiles = 0;
     
     for (const file of files) {
-        if (file.size > 10 * 1024 * 1024) { // 10MB limit
-            showToast('❌ File too large. Maximum size is 10MB', 'error');
+        if (file.size > 10 * 1024 * 1024) {
+            showConsoleMessage('❌ File too large. Maximum size is 10MB');
             continue;
         }
         
         try {
-            // Compress image
             const compressedFile = await compressImage(file, 0.6);
-            
-            // Upload to Supabase Storage
             const fileName = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${file.name.split('.').pop()}`;
+            
             const { data, error } = await supabase.storage
                 .from('work-images')
                 .upload(fileName, compressedFile);
             
             if (error) throw error;
             
-            // Get public URL
             const { data: { publicUrl } } = supabase.storage
                 .from('work-images')
                 .getPublicUrl(fileName);
@@ -241,7 +461,7 @@ async function processImages(files, isEdit = false) {
             
         } catch (error) {
             console.error('Error uploading image:', error);
-            showToast('❌ Failed to upload image: ' + file.name, 'error');
+            showConsoleMessage('❌ Failed to upload image: ' + file.name);
         }
         
         processedFiles++;
@@ -256,7 +476,7 @@ async function processImages(files, isEdit = false) {
         }, 1000);
     }
     
-    showToast(`✅ ${processedFiles} image(s) uploaded successfully`, 'success');
+    showConsoleMessage(`✅ ${processedFiles} image(s) uploaded successfully`);
 }
 
 function compressImage(file, quality) {
@@ -266,7 +486,6 @@ function compressImage(file, quality) {
         const img = new Image();
         
         img.onload = () => {
-            // Calculate new dimensions (max 1920x1080)
             const maxWidth = 1920;
             const maxHeight = 1080;
             let { width, height } = img;
@@ -284,7 +503,6 @@ function compressImage(file, quality) {
             canvas.width = width;
             canvas.height = height;
             
-            // Draw and compress
             ctx.drawImage(img, 0, 0, width, height);
             canvas.toBlob(resolve, 'image/jpeg', quality);
         };
@@ -315,7 +533,6 @@ function updateEditImagePreview() {
     const container = document.getElementById('editImagePreviewContainer');
     if (!container) return;
     
-    // Combine existing images with new uploads
     const allImages = [...(currentWorkImages || []), ...editUploadedImages];
     
     if (allImages.length === 0) {
@@ -337,12 +554,10 @@ function updateEditImagePreview() {
 function removeImage(index, isEdit = false, isExisting = false) {
     if (isEdit) {
         if (isExisting) {
-            // Remove from current work images
             if (currentWorkImages) {
                 currentWorkImages.splice(index, 1);
             }
         } else {
-            // Remove from new uploads
             const newIndex = index - (currentWorkImages?.length || 0);
             editUploadedImages.splice(newIndex, 1);
         }
@@ -369,416 +584,10 @@ function closeImageViewer() {
     }
 }
 
-// == NOTES FUNCTIONALITY ==
-async function loadNotes() {
-    try {
-        const { data, error } = await supabase
-            .from('notes')
-            .select('*')
-            .eq('user_name', currentUser)
-            .single();
-        
-        if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-            throw error;
-        }
-        
-        const notesContent = data ? data.content || '' : '';
-        currentNotes = notesContent;
-        lastSavedNotes = notesContent;
-        
-        const textarea = document.getElementById('notesTextarea');
-        if (textarea) {
-            textarea.value = notesContent;
-            updateNotesStats();
-        }
-        
-        if (data && data.updated_at) {
-            updateLastSavedTime(data.updated_at, 'notes');
-        }
-    } catch (error) {
-        console.error('Error loading notes:', error);
-        showToast('❌ Failed to load notes', 'error');
-    }
-}
-
-async function saveNotes() {
-    if (isSavingNotes || currentNotes === lastSavedNotes) return;
-    
-    isSavingNotes = true;
-    showNotesSaveIndicator('saving');
-    
-    try {
-        const { data, error } = await supabase
-            .from('notes')
-            .upsert({
-                user_name: currentUser,
-                content: currentNotes
-            })
-            .select()
-            .single();
-        
-        if (error) throw error;
-        
-        lastSavedNotes = currentNotes;
-        showNotesSaveIndicator('saved');
-        updateLastSavedTime(data.updated_at, 'notes');
-        
-    } catch (error) {
-        console.error('Error saving notes:', error);
-        showNotesSaveIndicator('error');
-        showToast('❌ Failed to save notes', 'error');
-    } finally {
-        isSavingNotes = false;
-    }
-}
-
-function handleNotesInput() {
-    const textarea = document.getElementById('notesTextarea');
-    if (!textarea) return;
-    
-    currentNotes = textarea.value;
-    updateNotesStats();
-    
-    // Clear previous timeout
-    if (notesAutoSaveTimeout) {
-        clearTimeout(notesAutoSaveTimeout);
-    }
-    
-    // Show saving indicator immediately
-    showNotesSaveIndicator('saving');
-    
-    // Set new timeout for auto-save
-    notesAutoSaveTimeout = setTimeout(() => {
-        saveNotes();
-    }, 1000); // Save after 1 second of inactivity
-}
-
-function updateNotesStats() {
-    const textarea = document.getElementById('notesTextarea');
-    if (!textarea) return;
-    
-    const content = textarea.value;
-    const characterCount = content.length;
-    const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
-    const lineCount = content.split('\n').length;
-    
-    // Update counters
-    const charElement = document.getElementById('characterCount');
-    const wordElement = document.getElementById('wordCount');
-    const lineElement = document.getElementById('lineCount');
-    
-    if (charElement) charElement.textContent = characterCount.toLocaleString();
-    if (wordElement) wordElement.textContent = wordCount.toLocaleString();
-    if (lineElement) lineElement.textContent = lineCount.toLocaleString();
-}
-
-function showNotesSaveIndicator(status) {
-    const indicator = document.getElementById('notesSaveIndicator');
-    const statusElement = document.getElementById('notesAutoSaveStatus');
-    
-    if (!indicator || !statusElement) return;
-    
-    switch (status) {
-        case 'saving':
-            indicator.classList.remove('hidden');
-            statusElement.textContent = 'Saving...';
-            statusElement.className = 'text-yellow-600';
-            break;
-        case 'saved':
-            indicator.classList.add('hidden');
-            statusElement.textContent = 'Saved';
-            statusElement.className = 'text-green-600';
-            break;
-        case 'error':
-            indicator.classList.add('hidden');
-            statusElement.textContent = 'Error';
-            statusElement.className = 'text-red-600';
-            break;
-    }
-}
-
-// == TODO FUNCTIONALITY ==
-async function loadTodos() {
-    try {
-        const { data, error } = await supabase
-            .from('todos')
-            .select('*')
-            .eq('user_name', currentUser)
-            .single();
-        
-        if (error && error.code !== 'PGRST116') {
-            throw error;
-        }
-        
-        if (data && data.todos) {
-            todoItems = JSON.parse(data.todos);
-        } else {
-            todoItems = [];
-        }
-        
-        renderTodos();
-        updateTodoStats();
-        
-        if (data && data.updated_at) {
-            updateLastSavedTime(data.updated_at, 'todo');
-        }
-    } catch (error) {
-        console.error('Error loading todos:', error);
-        showToast('❌ Failed to load todos', 'error');
-    }
-}
-
-async function saveTodos() {
-    if (isSavingTodos) return;
-    
-    isSavingTodos = true;
-    showTodoSaveIndicator('saving');
-    
-    try {
-        const { data, error } = await supabase
-            .from('todos')
-            .upsert({
-                user_name: currentUser,
-                todos: JSON.stringify(todoItems)
-            })
-            .select()
-            .single();
-        
-        if (error) throw error;
-        
-        showTodoSaveIndicator('saved');
-        updateLastSavedTime(data.updated_at, 'todo');
-        
-    } catch (error) {
-        console.error('Error saving todos:', error);
-        showTodoSaveIndicator('error');
-        showToast('❌ Failed to save todos', 'error');
-    } finally {
-        isSavingTodos = false;
-    }
-}
-
-function addTodo() {
-    const input = document.getElementById('newTodoInput');
-    const text = input.value.trim();
-    
-    if (!text) return;
-    
-    const newTodo = {
-        id: Date.now(),
-        text: text,
-        completed: false,
-        createdAt: new Date().toISOString()
-    };
-    
-    todoItems.unshift(newTodo);
-    input.value = '';
-    renderTodos();
-    updateTodoStats();
-    saveTodos();
-}
-
-function handleTodoKeyPress(event) {
-    if (event.key === 'Enter') {
-        addTodo();
-    }
-}
-
-function toggleTodo(todoId) {
-    const todo = todoItems.find(t => t.id === todoId);
-    if (todo) {
-        todo.completed = !todo.completed;
-        renderTodos();
-        updateTodoStats();
-        saveTodos();
-    }
-}
-
-function deleteTodo(todoId) {
-    todoItems = todoItems.filter(t => t.id !== todoId);
-    renderTodos();
-    updateTodoStats();
-    saveTodos();
-}
-
-function renderTodos() {
-    const container = document.getElementById('todosList');
-    if (!container) return;
-    
-    if (todoItems.length === 0) {
-        container.innerHTML = `
-            <div class="text-center py-8 text-gray-500">
-                <svg class="w-12 h-12 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
-                </svg>
-                <p>No tasks yet. Add your first task above!</p>
-            </div>
-        `;
-        return;
-    }
-    
-    container.innerHTML = todoItems.map(todo => `
-        <div class="todo-item ${todo.completed ? 'completed' : ''}">
-            <div class="todo-checkbox ${todo.completed ? 'checked' : ''}" onclick="toggleTodo(${todo.id})">
-                ${todo.completed ? '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>' : ''}
-            </div>
-            <div class="todo-text flex-1">${todo.text}</div>
-            <button onclick="deleteTodo(${todo.id})" class="text-red-400 hover:text-red-600 p-1 rounded transition-colors">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                </svg>
-            </button>
-        </div>
-    `).join('');
-}
-
-function updateTodoStats() {
-    const totalElement = document.getElementById('totalTodos');
-    const completedElement = document.getElementById('completedTodos');
-    
-    if (totalElement) totalElement.textContent = todoItems.length;
-    if (completedElement) completedElement.textContent = todoItems.filter(t => t.completed).length;
-}
-
-function showTodoSaveIndicator(status) {
-    const indicator = document.getElementById('todoSaveIndicator');
-    const statusElement = document.getElementById('todoAutoSaveStatus');
-    
-    if (!indicator || !statusElement) return;
-    
-    switch (status) {
-        case 'saving':
-            indicator.classList.remove('hidden');
-            statusElement.textContent = 'Saving...';
-            statusElement.className = 'text-yellow-600';
-            break;
-        case 'saved':
-            indicator.classList.add('hidden');
-            statusElement.textContent = 'Saved';
-            statusElement.className = 'text-green-600';
-            break;
-        case 'error':
-            indicator.classList.add('hidden');
-            statusElement.textContent = 'Error';
-            statusElement.className = 'text-red-600';
-            break;
-    }
-}
-
-function updateLastSavedTime(timestamp, type) {
-    const elementId = type === 'todo' ? 'todoLastSaved' : 'notesLastSaved';
-    const element = document.getElementById(elementId);
-    if (!element) return;
-    
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffInSeconds = Math.floor((now - date) / 1000);
-    
-    let timeText;
-    if (diffInSeconds < 60) {
-        timeText = 'Saved just now';
-    } else if (diffInSeconds < 3600) {
-        timeText = `Saved ${Math.floor(diffInSeconds / 60)} minutes ago`;
-    } else if (diffInSeconds < 86400) {
-        timeText = `Saved ${Math.floor(diffInSeconds / 3600)} hours ago`;
-    } else {
-        timeText = `Saved on ${date.toLocaleDateString()}`;
-    }
-    
-    element.textContent = timeText;
-}
-
-function clearNotes() {
-    document.getElementById('clearNotesModal').classList.remove('hidden');
-}
-
-function closeClearNotesModal() {
-    document.getElementById('clearNotesModal').classList.add('hidden');
-}
-
-async function confirmClearNotes() {
-    const textarea = document.getElementById('notesTextarea');
-    if (textarea) {
-        textarea.value = '';
-        currentNotes = '';
-        updateNotesStats();
-        await saveNotes();
-    }
-    closeClearNotesModal();
-    showToast('🗑️ All notes cleared', 'info');
-}
-
-function clearTodos() {
-    document.getElementById('clearTodosModal').classList.remove('hidden');
-}
-
-function closeClearTodosModal() {
-    document.getElementById('clearTodosModal').classList.add('hidden');
-}
-
-async function confirmClearTodos() {
-    todoItems = [];
-    renderTodos();
-    updateTodoStats();
-    await saveTodos();
-    closeClearTodosModal();
-    showToast('🗑️ All todos cleared', 'info');
-}
-
-function copyNotesToClipboard() {
-    const content = document.getElementById('notesTextarea')?.value || '';
-    if (!content.trim()) {
-        showToast('❌ No notes to copy', 'error');
-        return;
-    }
-    
-    navigator.clipboard.writeText(content).then(() => {
-        showToast('📋 Notes copied to clipboard', 'success');
-    }).catch(() => {
-        showToast('❌ Failed to copy notes', 'error');
-    });
-}
-
-function subscribeToNotes() {
-    supabase
-        .channel('notes-changes')
-        .on('postgres_changes', 
-            { event: '*', schema: 'public', table: 'notes' },
-            (payload) => {
-                console.log('🔄 Notes table changed:', payload);
-                // Only reload if it's for current user and not from current session
-                if (payload.new && payload.new.user_name === currentUser) {
-                    const textarea = document.getElementById('notesTextarea');
-                    if (textarea && payload.new.content !== textarea.value) {
-                        // Another session updated the notes
-                        loadNotes();
-                    }
-                }
-            }
-        )
-        .subscribe();
-}
-
-function subscribeToTodos() {
-    supabase
-        .channel('todos-changes')
-        .on('postgres_changes', 
-            { event: '*', schema: 'public', table: 'todos' },
-            (payload) => {
-                console.log('🔄 Todos table changed:', payload);
-                if (payload.new && payload.new.user_name === currentUser) {
-                    loadTodos();
-                }
-            }
-        )
-        .subscribe();
-}
-
 // == KEYBOARD EVENT LISTENERS ==
 function setupKeyboardEventListeners() {
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
-            // Close any open modals with Esc key
             if (!document.getElementById('workDetailsModal').classList.contains('hidden')) {
                 closeWorkDetailsModal();
             } else if (!document.getElementById('editWorkModal').classList.contains('hidden')) {
@@ -787,47 +596,18 @@ function setupKeyboardEventListeners() {
                 closeAddCategoryModal();
             } else if (!document.getElementById('deleteConfirmModal').classList.contains('hidden')) {
                 closeDeleteConfirmModal();
-            } else if (!document.getElementById('clearNotesModal').classList.contains('hidden')) {
-                closeClearNotesModal();
-            } else if (!document.getElementById('clearTodosModal').classList.contains('hidden')) {
-                closeClearTodosModal();
+            } else if (!document.getElementById('addQuickTaskModal').classList.contains('hidden')) {
+                closeAddQuickTaskModal();
             } else if (!document.getElementById('logoutConfirmModal').classList.contains('hidden')) {
                 closeLogoutConfirmModal();
-            } else if (!document.getElementById('unsavedChangesModal').classList.contains('hidden')) {
-                closeUnsavedChangesModal();
             } else if (!document.getElementById('imageViewerModal').classList.contains('hidden')) {
                 closeImageViewer();
             } else {
-                // Close dropdowns
                 closeAllDropdowns();
                 closeProfileDropdown({ target: document.body });
             }
         }
     });
-}
-
-// == UNSAVED CHANGES TRACKING ==
-function trackChanges() {
-    const forms = ['workForm', 'editWorkForm', 'addCategoryForm'];
-    
-    forms.forEach(formId => {
-        const form = document.getElementById(formId);
-        if (form) {
-            const inputs = form.querySelectorAll('input, textarea, select');
-            inputs.forEach(input => {
-                input.addEventListener('input', () => {
-                    hasUnsavedChanges = true;
-                });
-                input.addEventListener('change', () => {
-                    hasUnsavedChanges = true;
-                });
-            });
-        }
-    });
-}
-
-function resetUnsavedChanges() {
-    hasUnsavedChanges = false;
 }
 
 // == MODAL CLOSE HANDLERS ==
@@ -843,20 +623,11 @@ function closeWorkDetailsModal(event) {
 function closeEditModal(event) {
     if (event && event.target !== event.currentTarget) return;
     
-    if (hasUnsavedChanges) {
-        pendingModalClose = 'editWorkModal';
-        showUnsavedChangesModal();
-        return;
-    }
-    
     const modal = document.getElementById('editWorkModal');
     if (modal) {
         modal.classList.add('hidden');
     }
     editingWorkId = null;
-    resetUnsavedChanges();
-    
-    // Clear edit images
     editUploadedImages = [];
     currentWorkImages = [];
 }
@@ -864,18 +635,11 @@ function closeEditModal(event) {
 function closeAddCategoryModal(event) {
     if (event && event.target !== event.currentTarget) return;
     
-    if (hasUnsavedChanges) {
-        pendingModalClose = 'addCategoryModal';
-        showUnsavedChangesModal();
-        return;
-    }
-    
     const modal = document.getElementById('addCategoryModal');
     if (modal) {
         modal.classList.add('hidden');
     }
     document.getElementById('addCategoryForm').reset();
-    resetUnsavedChanges();
 }
 
 // == CONFIRMATION MODALS ==
@@ -911,37 +675,6 @@ function confirmLogout() {
     closeLogoutConfirmModal();
 }
 
-function showUnsavedChangesModal() {
-    document.getElementById('unsavedChangesModal').classList.remove('hidden');
-}
-
-function closeUnsavedChangesModal() {
-    document.getElementById('unsavedChangesModal').classList.add('hidden');
-    pendingModalClose = null;
-}
-
-function discardChanges() {
-    resetUnsavedChanges();
-    closeUnsavedChangesModal();
-    
-    if (pendingModalClose) {
-        const modal = document.getElementById(pendingModalClose);
-        if (modal) {
-            modal.classList.add('hidden');
-        }
-        
-        if (pendingModalClose === 'editWorkModal') {
-            editingWorkId = null;
-            editUploadedImages = [];
-            currentWorkImages = [];
-        } else if (pendingModalClose === 'addCategoryModal') {
-            document.getElementById('addCategoryForm').reset();
-        }
-        
-        pendingModalClose = null;
-    }
-}
-
 // == CATEGORIES MANAGEMENT ==
 async function refreshCategories() {
     try {
@@ -956,12 +689,11 @@ async function refreshCategories() {
         populateCategoryDropdowns();
     } catch (error) {
         console.error('Error fetching categories:', error);
-        showToast('❌ Failed to refresh categories', 'error');
+        showConsoleMessage('❌ Failed to refresh categories');
     }
 }
 
 function populateCategoryDropdowns() {
-    // Populate add work category dropdown
     const categoryOptions = document.getElementById('categoryOptions');
     if (categoryOptions) {
         categoryOptions.innerHTML = '';
@@ -979,7 +711,6 @@ function populateCategoryDropdowns() {
         });
     }
     
-    // Populate edit work category dropdown
     const editCategoryDropdown = document.getElementById('editWorkCategory');
     if (editCategoryDropdown) {
         editCategoryDropdown.innerHTML = '';
@@ -991,7 +722,6 @@ function populateCategoryDropdowns() {
         });
     }
     
-    // Populate category filter dropdown
     const categoryFilterItems = document.getElementById('categoryFilterItems');
     if (categoryFilterItems) {
         categoryFilterItems.innerHTML = '';
@@ -1026,7 +756,7 @@ function filterCategories(searchTerm) {
         div.innerHTML = `
             <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
-                </svg>
+            </svg>
             ${category.name}
         `;
         categoryOptions.appendChild(div);
@@ -1038,7 +768,7 @@ function selectCategory(categoryName) {
     document.getElementById('categoryText').textContent = categoryName;
     document.getElementById('categorySearch').value = '';
     closeAllDropdowns();
-    filterCategories(''); // Reset filter
+    filterCategories('');
 }
 
 function selectCategoryFilter(categoryName) {
@@ -1048,20 +778,16 @@ function selectCategoryFilter(categoryName) {
     renderWorks();
 }
 
-// == CATEGORY MODAL FUNCTIONS ==
 function showAddCategoryModal() {
     closeAllDropdowns();
-    resetUnsavedChanges();
     document.getElementById('addCategoryModal').classList.remove('hidden');
     setTimeout(() => {
         document.getElementById('newCategoryName').focus();
-        trackChanges();
     }, 100);
 }
 
 // == FORM HANDLERS ==
 function setupFormHandlers() {
-    // Work form handler
     const workForm = document.getElementById('workForm');
     if (workForm) {
         workForm.addEventListener('submit', async function(e) {
@@ -1071,12 +797,12 @@ function setupFormHandlers() {
             const category = document.getElementById('workCategory').value;
             
             if (!assignedStaff) {
-                showToast('❌ Please select a staff member', 'error');
+                showConsoleMessage('❌ Please select a staff member');
                 return;
             }
             
             if (!category) {
-                showToast('❌ Please select a category', 'error');
+                showConsoleMessage('❌ Please select a category');
                 return;
             }
             
@@ -1105,31 +831,31 @@ function setupFormHandlers() {
                 if (error) throw error;
                 
                 resetForm();
-                resetUnsavedChanges();
                 uploadedImages = [];
                 updateImagePreview();
                 await refreshWorks();
                 showTab('works');
-                showToast('✅ Work added successfully!', 'success');
+                showConsoleMessage('✅ Work added successfully!');
                 
-                // Enhanced notification - only show to other staff members
                 if (assignedStaff !== currentUser) {
-                    showEnhancedNotification(
-                        `${currentUser} added a new work for ${assignedStaff}`,
-                        `"${workData.work_name}" has been assigned`,
-                        memberAvatars[assignedStaff],
-                        assignedStaff
+                    await createNotification(
+                        assignedStaff,
+                        currentUser,
+                        data[0].id,
+                        'work_assigned',
+                        `${currentUser} assigned you a new work`,
+                        `"${workData.work_name}" has been assigned to you`,
+                        sessionId
                     );
                 }
                 
             } catch (error) {
                 console.error('Error adding work:', error);
-                showToast('❌ Failed to add work', 'error');
+                showConsoleMessage('❌ Failed to add work');
             }
         });
     }
     
-    // Add category form handler
     const addCategoryForm = document.getElementById('addCategoryForm');
     if (addCategoryForm) {
         addCategoryForm.addEventListener('submit', async function(e) {
@@ -1138,7 +864,7 @@ function setupFormHandlers() {
             const categoryName = document.getElementById('newCategoryName').value.trim();
             
             if (!categoryName) {
-                showToast('❌ Please enter a category name', 'error');
+                showConsoleMessage('❌ Please enter a category name');
                 return;
             }
             
@@ -1147,7 +873,7 @@ function setupFormHandlers() {
             );
             
             if (existingCategory) {
-                showToast('❌ Category already exists', 'error');
+                showConsoleMessage('❌ Category already exists');
                 return;
             }
             
@@ -1167,17 +893,60 @@ function setupFormHandlers() {
                 
                 document.getElementById('addCategoryModal').classList.add('hidden');
                 document.getElementById('addCategoryForm').reset();
-                resetUnsavedChanges();
-                showToast('✅ Category added successfully!', 'success');
+                showConsoleMessage('✅ Category added successfully!');
                 
             } catch (error) {
                 console.error('Error adding category:', error);
-                showToast('❌ Failed to add category', 'error');
+                showConsoleMessage('❌ Failed to add category');
             }
         });
     }
     
-    // Edit work form handler - REMOVED CONFIRMATION, DIRECT UPDATE
+    const addQuickTaskForm = document.getElementById('addQuickTaskForm');
+    if (addQuickTaskForm) {
+        addQuickTaskForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const taskName = document.getElementById('quickTaskName').value.trim();
+            const assignedStaff = document.getElementById('quickTaskStaff').value;
+            const dueDate = document.getElementById('quickTaskDate').value;
+            
+            if (!taskName) {
+                showConsoleMessage('❌ Please enter a task name');
+                return;
+            }
+            
+            if (!assignedStaff) {
+                showConsoleMessage('❌ Please select a staff member');
+                return;
+            }
+            
+            const taskData = {
+                task_name: taskName,
+                assigned_staff: assignedStaff,
+                due_date: dueDate || null,
+                created_by: currentUser
+            };
+            
+            try {
+                const { data, error } = await supabase
+                    .from('quick_tasks')
+                    .insert([taskData])
+                    .select();
+                
+                if (error) throw error;
+                
+                await refreshQuickTasks();
+                closeAddQuickTaskModal();
+                showConsoleMessage('✅ Quick task added successfully!');
+                
+            } catch (error) {
+                console.error('Error adding quick task:', error);
+                showConsoleMessage('❌ Failed to add quick task');
+            }
+        });
+    }
+    
     const editWorkForm = document.getElementById('editWorkForm');
     if (editWorkForm) {
         editWorkForm.addEventListener('submit', async function(e) {
@@ -1216,71 +985,57 @@ function setupFormHandlers() {
                     .update(updatedWork)
                     .eq('id', editingWorkId);
                 
-                if (error) {
-                    if (error.message && (error.message.includes('mrp') || error.message.includes('quotation_rate'))) {
-                        const { mrp, quotation_rate, ...workWithoutPricing } = updatedWork;
-                        
-                        const { error: retryError } = await supabase
-                            .from('works')
-                            .update(workWithoutPricing)
-                            .eq('id', editingWorkId);
-                        
-                        if (retryError) throw retryError;
-                        
-                        showToast('⚠️ Work updated (pricing fields not available)', 'warning');
-                    } else {
-                        throw error;
-                    }
-                } else {
-                    showToast('✅ Work updated successfully!', 'success');
-                }
+                if (error) throw error;
                 
-                // DIRECT CLOSE WITHOUT CONFIRMATION
                 const modal = document.getElementById('editWorkModal');
                 if (modal) {
                     modal.classList.add('hidden');
                 }
                 editingWorkId = null;
-                resetUnsavedChanges();
                 editUploadedImages = [];
                 currentWorkImages = [];
                 
                 await refreshWorks();
-                
-                showBrowserNotification('📝 Work Updated', {
-                    body: `"${updatedWork.work_name}" has been updated`,
-                    tag: 'work-update'
-                });
+                showConsoleMessage('✅ Work updated successfully!');
                 
             } catch (error) {
                 console.error('Error updating work:', error);
-                showToast('❌ Failed to update work', 'error');
+                showConsoleMessage('❌ Failed to update work');
             }
         });
     }
-
-    setTimeout(trackChanges, 100);
 }
 
-// == ENHANCED NOTIFICATIONS ==
-function showEnhancedNotification(title, body, avatarUrl, targetUser) {
-    // Only show to other users, not the creator
-    if (targetUser !== currentUser) {
-        showBrowserNotification(title, {
-            body: body,
-            icon: avatarUrl,
-            tag: 'new-work-assignment'
-        });
+// == NOTIFICATION SYSTEM ==
+async function createNotification(recipientUser, senderUser, workId, type, title, message, senderSessionId) {
+    try {
+        const { error } = await supabase
+            .from('notifications')
+            .insert([{
+                recipient_user: recipientUser,
+                sender_user: senderUser,
+                work_id: workId,
+                notification_type: type,
+                title: title,
+                message: message,
+                session_id: senderSessionId
+            }]);
+        
+        if (error) throw error;
+        
+        console.log('✅ Notification created successfully');
+    } catch (error) {
+        console.error('Error creating notification:', error);
     }
 }
 
 // == DROPDOWN MANAGEMENT ==
 function setupDropdownHandlers() {
-    // Close dropdowns when clicking outside
     document.addEventListener('click', function(event) {
         if (!event.target.closest('.custom-dropdown') && 
             !event.target.closest('.status-dropdown') &&
-            !event.target.closest('.profile-dropdown')) {
+            !event.target.closest('.profile-dropdown') &&
+            !event.target.closest('.work-search-container')) {
             closeAllDropdowns();
             closeProfileDropdown(event);
         }
@@ -1291,12 +1046,11 @@ function closeAllDropdowns() {
     const dropdowns = [
         { element: 'statusDropdown', icon: 'statusFilterIcon' },
         { element: 'categoryDropdown', icon: 'categoryFilterIcon' },
-        { element: 'deadlineDropdown', icon: 'deadlineFilterIcon' },
         { element: 'creatorDropdown', icon: 'creatorFilterIcon' },
-        { element: 'sortDropdown', icon: 'sortFilterIcon' },
         { element: 'assignStaffDropdown', icon: 'assignStaffIcon' },
         { element: 'priorityDropdown', icon: 'priorityIcon' },
-        { element: 'categorySearchDropdown', icon: 'categoryIcon' }
+        { element: 'categorySearchDropdown', icon: 'categoryIcon' },
+        { element: 'quickTaskStaffDropdown', icon: 'quickTaskStaffIcon' }
     ];
     
     dropdowns.forEach(({ element, icon }) => {
@@ -1310,7 +1064,6 @@ function closeAllDropdowns() {
         }
     });
 
-    // Close all status dropdowns
     document.querySelectorAll('.status-dropdown-menu').forEach(dropdown => {
         dropdown.remove();
     });
@@ -1320,14 +1073,9 @@ function toggleDropdown(dropdownId, iconId) {
     const dropdown = document.getElementById(dropdownId);
     const icon = document.getElementById(iconId);
     
-    if (!dropdown || !icon) {
-        console.error('Dropdown or icon not found:', dropdownId, iconId);
-        return;
-    }
+    if (!dropdown || !icon) return;
     
     const isHidden = dropdown.classList.contains('hidden');
-    
-    // Close all other dropdowns first
     closeAllDropdowns();
     
     if (isHidden) {
@@ -1345,16 +1093,8 @@ function toggleCategoryDropdown() {
     toggleDropdown('categoryDropdown', 'categoryFilterIcon');
 }
 
-function toggleDeadlineDropdown() {
-    toggleDropdown('deadlineDropdown', 'deadlineFilterIcon');
-}
-
 function toggleCreatorDropdown() {
     toggleDropdown('creatorDropdown', 'creatorFilterIcon');
-}
-
-function toggleSortDropdown() {
-    toggleDropdown('sortDropdown', 'sortFilterIcon');
 }
 
 function toggleAssignStaffDropdown() {
@@ -1367,7 +1107,6 @@ function togglePriorityDropdown() {
 
 function toggleCategorySearchDropdown() {
     toggleDropdown('categorySearchDropdown', 'categoryIcon');
-    // Focus on search input when opened
     setTimeout(() => {
         const searchInput = document.getElementById('categorySearch');
         if (searchInput) {
@@ -1384,39 +1123,9 @@ function selectStatusFilter(value) {
     renderWorks();
 }
 
-function selectDeadlineFilter(value) {
-    currentFilters.deadline = value;
-    const text = {
-        'all': 'All Deadlines',
-        'today': 'Due Today',
-        'tomorrow': 'Due Tomorrow',
-        'week': 'This Week',
-        'overdue': 'Overdue'
-    }[value] || 'All Deadlines';
-    
-    document.getElementById('deadlineFilterText').textContent = text;
-    closeAllDropdowns();
-    renderWorks();
-}
-
 function selectCreatorFilter(value) {
     currentFilters.creator = value;
     document.getElementById('creatorFilterText').textContent = value === 'all' ? 'All Creators' : value;
-    closeAllDropdowns();
-    renderWorks();
-}
-
-function selectSortFilter(value) {
-    currentFilters.sort = value;
-    const text = {
-        'overdue_pending': 'Overdue & Pending First',
-        'newest': 'Newest First',
-        'oldest': 'Oldest First',
-        'deadline': 'Deadline',
-        'status': 'Status'
-    }[value] || 'Overdue & Pending First';
-    
-    document.getElementById('sortFilterText').textContent = text;
     closeAllDropdowns();
     renderWorks();
 }
@@ -1446,7 +1155,6 @@ function selectPriority(value) {
 // == CANCEL ADD WORK ==
 function cancelAddWork() {
     resetForm();
-    resetUnsavedChanges();
     uploadedImages = [];
     updateImagePreview();
     showTab('dashboard');
@@ -1454,40 +1162,38 @@ function cancelAddWork() {
 
 // == CLEAR FILTERS ==
 function clearAllFilters() {
-    showCompletedWorks = false; // Reset completed works flag
+    showCompletedWorks = false;
     currentFilters = {
-        member: 'all', // Allow all staff to see all works
+        member: 'all',
         status: 'all',
         deadline: 'all',
         creator: 'all',
-        category: 'all',
-        sort: 'overdue_pending'
+        category: 'all'
     };
     
-    // Update dropdown texts
+    // Clear search
+    currentSearchTerm = '';
+    document.getElementById('workSearchInput').value = '';
+    
     document.getElementById('statusFilterText').textContent = 'All Status';
     document.getElementById('categoryFilterText').textContent = 'All Categories';
     document.getElementById('creatorFilterText').textContent = 'All Creators';
-    document.getElementById('sortFilterText').textContent = 'Overdue & Pending First';
     
-    // Update member tile selection
     selectMemberTile('all');
     
     closeAllDropdowns();
     renderWorks();
     updateMemberTiles();
     updateStats();
-    showToast('🔄 All filters cleared', 'info');
+    showConsoleMessage('🔄 All filters cleared');
 }
 
 // == MEMBER TILES ==
 function selectMemberTile(member) {
-    // Update visual state
     document.querySelectorAll('.member-tile').forEach(tile => {
         tile.classList.remove('active');
     });
     
-    // Find and activate the correct tile
     const tiles = document.querySelectorAll('.member-tile');
     tiles.forEach(tile => {
         if ((member === 'all' && tile.textContent.includes('All')) || 
@@ -1496,13 +1202,11 @@ function selectMemberTile(member) {
         }
     });
     
-    // Update filter
     currentFilters.member = member;
     renderWorks();
 }
 
 function updateMemberTiles() {
-    // Count works for each member (excluding completed works unless specifically showing them)
     const worksToCount = showCompletedWorks ? works : works.filter(w => w.status !== 'Completed');
     
     const counts = {
@@ -1514,7 +1218,6 @@ function updateMemberTiles() {
         Safvan: worksToCount.filter(w => w.assigned_staff === 'Safvan').length
     };
     
-    // Update count displays - check if elements exist
     const countElements = [
         { id: 'allCount', count: counts.all },
         { id: 'irshadCount', count: counts.Irshad },
@@ -1547,7 +1250,8 @@ function goToWorksWithFilter(filterType) {
         selectStatusFilter('Completed');
     } else if (filterType === 'today') {
         showCompletedWorks = false;
-        selectDeadlineFilter('today');
+        currentFilters.deadline = 'today';
+        renderWorks();
     } else if (filterType === 'all') {
         showCompletedWorks = false;
         selectStatusFilter('all');
@@ -1583,52 +1287,26 @@ function toggleNotifications() {
     if (!notificationsEnabled) {
         requestNotificationPermission().then(() => {
             if (notificationsEnabled) {
-                showToast('✅ Browser notifications enabled successfully!', 'success');
+                showConsoleMessage('✅ Browser notifications enabled successfully!');
             } else {
-                showToast('❌ Notification permission denied', 'error');
+                showConsoleMessage('❌ Notification permission denied');
             }
         });
     } else {
-        showToast('🔔 Notifications are already enabled!', 'info');
+        showConsoleMessage('🔔 Notifications are already enabled!');
     }
 }
 
-// == TOAST NOTIFICATIONS ==
-function showToast(message, type = 'info', duration = 3000) {
-    const toastContainer = document.getElementById('toastContainer');
-    const toast = document.createElement('div');
-    
-    const bgColor = {
-        'success': 'bg-green-500',
-        'error': 'bg-red-500', 
-        'warning': 'bg-yellow-500',
-        'info': 'bg-blue-500'
-    }[type] || 'bg-blue-500';
-    
-    toast.className = `${bgColor} text-white px-6 py-4 rounded-lg shadow-lg animate-slide-in flex items-center gap-3 max-w-sm`;
-    toast.innerHTML = `
-        <div class="flex-1">${message}</div>
-        <button onclick="this.parentElement.remove()" class="text-white hover:text-gray-200">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-            </svg>
-        </button>
-    `;
-    
-    toastContainer.appendChild(toast);
-    
-    setTimeout(() => {
-        if (toast.parentElement) {
-            toast.remove();
-        }
-    }, duration);
+// == CONSOLE MESSAGES (REPLACING TOAST) ==
+function showConsoleMessage(message) {
+    console.log(message);
 }
 
 function copyToClipboard(text) {
     navigator.clipboard.writeText(text).then(() => {
-        showToast('📋 WhatsApp number copied to clipboard!', 'success');
+        showConsoleMessage('📋 WhatsApp number copied to clipboard!');
     }).catch(() => {
-        showToast('❌ Failed to copy to clipboard', 'error');
+        showConsoleMessage('❌ Failed to copy to clipboard');
     });
 }
 
@@ -1637,79 +1315,61 @@ function loginUser(name, role) {
     currentUser = name;
     currentUserRole = role;
     
-    // Save login state
     localStorage.setItem('currentUser', name);
     localStorage.setItem('currentUserRole', role);
     
-    // Update UI
     document.getElementById('loginScreen').classList.add('hidden');
     document.getElementById('mainApp').classList.remove('hidden');
     document.getElementById('userName').textContent = name;
     document.getElementById('profileUserName').textContent = name;
     document.getElementById('userAvatar').src = memberAvatars[name];
     
-    // Initialize app data
     Promise.all([
         refreshWorks(),
         refreshCategories(),
-        loadNotes(),
-        loadTodos()
+        refreshQuickTasks()
     ]).then(() => {
         setupMemberFilters();
         subscribeToWorks();
         subscribeToNotifications();
-        subscribeToNotes();
-        subscribeToTodos();
+        subscribeToQuickTasks();
         
         renderWorks();
         updateStats();
         updateMemberTiles();
         showTab('dashboard');
         
-        showToast(`👋 Welcome back, ${name}!`, 'success');
+        showConsoleMessage(`👋 Welcome back, ${name}!`);
     });
 }
 
 function executeLogout() {
-    // Save notes and todos before logout
-    if (currentNotes !== lastSavedNotes) {
-        saveNotes();
-    }
-    if (todoItems.length > 0) {
-        saveTodos();
-    }
-    
-    // Clear saved login state
     localStorage.removeItem('currentUser');
     localStorage.removeItem('currentUserRole');
     
-    // Reset global state
     currentUser = null;
     currentUserRole = null;
+    sessionId = null;
     works = [];
     categories = [];
+    quickTasks = [];
     showCompletedWorks = false;
-    currentNotes = '';
-    lastSavedNotes = '';
-    todoItems = [];
     uploadedImages = [];
     editUploadedImages = [];
     currentWorkImages = [];
+    currentSearchTerm = '';
     
-    // Reset UI
     document.getElementById('mainApp').classList.add('hidden');
     document.getElementById('loginScreen').classList.remove('hidden');
     
-    // Reset forms
     resetForm();
-    resetUnsavedChanges();
     
-    showToast('👋 Logged out successfully', 'info');
+    showConsoleMessage('👋 Logged out successfully');
 }
 
 // == SETUP MEMBER FILTERS ==
 function setupMemberFilters() {
-    // All staff can now see all members' works - no restrictions
+    // All staff can see all members' works
 }
 
 // == REAL-TIME SUBSCRIPTIONS ==
@@ -1720,7 +1380,6 @@ function subscribeToWorks() {
             { event: '*', schema: 'public', table: 'works' },
             async (payload) => {
                 console.log('🔄 Works table changed:', payload);
-                // Force refresh after a small delay to ensure consistency
                 setTimeout(async () => {
                     await refreshWorks();
                 }, 500);
@@ -1731,34 +1390,34 @@ function subscribeToWorks() {
 
 function subscribeToNotifications() {
     supabase
-        .channel('work-notifications')
+        .channel('notifications-changes')
         .on('postgres_changes',
-            { event: 'INSERT', schema: 'public', table: 'works' },
+            { event: 'INSERT', schema: 'public', table: 'notifications' },
             (payload) => {
-                const newWork = payload.new;
-                if (newWork.assigned_staff === currentUser && newWork.created_by !== currentUser) {
-                    showEnhancedNotification(
-                        `${newWork.created_by} added a new work for you`,
-                        `"${newWork.work_name}" has been assigned to you`,
-                        memberAvatars[newWork.assigned_staff],
-                        newWork.assigned_staff
-                    );
+                const notification = payload.new;
+                if (notification.recipient_user === currentUser && 
+                    notification.session_id !== sessionId) {
+                    showBrowserNotification(notification.title, {
+                        body: notification.message,
+                        icon: memberAvatars[notification.sender_user],
+                        tag: notification.notification_type
+                    });
                 }
             }
         )
-        .on('postgres_changes',
-            { event: 'UPDATE', schema: 'public', table: 'works' },
-            (payload) => {
-                const updatedWork = payload.new;
-                const oldWork = payload.old;
-                
-                if (updatedWork.assigned_staff === currentUser && 
-                    updatedWork.status !== oldWork.status) {
-                    showBrowserNotification('🔄 Work Status Updated', {
-                        body: `"${updatedWork.work_name}" status changed to ${updatedWork.status}`,
-                        tag: 'status-update'
-                    });
-                }
+        .subscribe();
+}
+
+function subscribeToQuickTasks() {
+    supabase
+        .channel('quick-tasks-changes')
+        .on('postgres_changes', 
+            { event: '*', schema: 'public', table: 'quick_tasks' },
+            async (payload) => {
+                console.log('🔄 Quick tasks table changed:', payload);
+                setTimeout(async () => {
+                    await refreshQuickTasks();
+                }, 500);
             }
         )
         .subscribe();
@@ -1781,56 +1440,44 @@ async function refreshWorks() {
         updateRecentActivity();
     } catch (error) {
         console.error('Error fetching works:', error);
-        showToast('❌ Failed to refresh works', 'error');
+        showConsoleMessage('❌ Failed to refresh works');
     }
 }
 
 function filterWorks() {
     let filteredWorks = [...works];
     
-    // Filter out completed works unless specifically showing them
     if (!showCompletedWorks) {
         filteredWorks = filteredWorks.filter(work => work.status !== 'Completed');
     }
     
-    // Filter by member
     if (currentFilters.member !== 'all') {
         filteredWorks = filteredWorks.filter(work => 
             work.assigned_staff === currentFilters.member
         );
     }
     
-    // Filter by status
     if (currentFilters.status !== 'all') {
         filteredWorks = filteredWorks.filter(work => 
             work.status === currentFilters.status
         );
     }
     
-    // Filter by category
     if (currentFilters.category !== 'all') {
         filteredWorks = filteredWorks.filter(work => 
             work.category === currentFilters.category
         );
     }
     
-    // Filter by creator
     if (currentFilters.creator !== 'all') {
         filteredWorks = filteredWorks.filter(work => 
             work.created_by === currentFilters.creator
         );
     }
     
-    // Filter by deadline
     if (currentFilters.deadline !== 'all') {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        
-        const weekEnd = new Date(today);
-        weekEnd.setDate(weekEnd.getDate() + 7);
         
         filteredWorks = filteredWorks.filter(work => {
             if (!work.deadline) return currentFilters.deadline === 'all';
@@ -1841,55 +1488,25 @@ function filterWorks() {
             switch (currentFilters.deadline) {
                 case 'today':
                     return workDeadline.getTime() === today.getTime();
-                case 'tomorrow':
-                    return workDeadline.getTime() === tomorrow.getTime();
-                case 'week':
-                    return workDeadline >= today && workDeadline <= weekEnd;
-                case 'overdue':
-                    return workDeadline < today && work.status !== 'Completed';
+                default:
+                    return true;
             }
-            return true;
         });
     }
     
-    // Sort works
+    // Default sorting by overdue and pending first
     filteredWorks.sort((a, b) => {
-        switch (currentFilters.sort) {
-            case 'overdue_pending':
-                // First, sort by overdue status
-                const aOverdue = isOverdue(a);
-                const bOverdue = isOverdue(b);
-                if (aOverdue && !bOverdue) return -1;
-                if (!aOverdue && bOverdue) return 1;
-                
-                // Then by pending status
-                const aPending = a.status === 'Pending';
-                const bPending = b.status === 'Pending';
-                if (aPending && !bPending) return -1;
-                if (!aPending && bPending) return 1;
-                
-                // Finally by creation date (newest first)
-                return new Date(b.created_at) - new Date(a.created_at);
-                
-            case 'newest':
-                return new Date(b.created_at) - new Date(a.created_at);
-                
-            case 'oldest':
-                return new Date(a.created_at) - new Date(b.created_at);
-                
-            case 'deadline':
-                if (!a.deadline && !b.deadline) return 0;
-                if (!a.deadline) return 1;
-                if (!b.deadline) return -1;
-                return new Date(a.deadline) - new Date(b.deadline);
-                
-            case 'status':
-                const statusOrder = { 'Pending': 0, 'In Progress': 1, 'Proof': 2, 'Completed': 3 };
-                return statusOrder[a.status] - statusOrder[b.status];
-                
-            default:
-                return new Date(b.created_at) - new Date(a.created_at);
-        }
+        const aOverdue = isOverdue(a);
+        const bOverdue = isOverdue(b);
+        if (aOverdue && !bOverdue) return -1;
+        if (!aOverdue && bOverdue) return 1;
+        
+        const aPending = a.status === 'Pending';
+        const bPending = b.status === 'Pending';
+        if (aPending && !bPending) return -1;
+        if (!aPending && bPending) return 1;
+        
+        return new Date(b.created_at) - new Date(a.created_at);
     });
     
     return filteredWorks;
@@ -1911,8 +1528,12 @@ function renderWorks() {
     if (noWorks) noWorks.classList.add('hidden');
     
     container.innerHTML = filteredWorks.map(work => createWorkCard(work)).join('');
+    
+    // Apply search filter after rendering
+    applySearchFilter();
 }
 
+// == UPDATED: WORK CARD WITH NO POPUP ON STATUS CHANGE ==
 function createWorkCard(work) {
     const isOverdueWork = isOverdue(work);
     const deadlineText = formatDeadline(work);
@@ -1928,23 +1549,12 @@ function createWorkCard(work) {
         'Pending': 'bg-orange-100 text-orange-800',
         'In Progress': 'bg-blue-100 text-blue-800',
         'Proof': 'bg-purple-100 text-purple-800',
+        'Unpaid': 'bg-red-100 text-red-800',
         'Completed': 'bg-green-100 text-green-800'
     };
     
-    // Fixed overdue indicator - made it properly visible
-    const overdueIndicator = isOverdueWork ? `
-        <div class="overdue-indicator">
-            <div class="overdue-dot">
-                <div class="overdue-ping"></div>
-            </div>
-        </div>
-        <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 to-red-600 rounded-t-lg animate-pulse"></div>
-    ` : '';
-    
-    // Check if work is being updated
     const isUpdating = statusUpdateInProgress.has(work.id);
     
-    // Generate image thumbnail if images exist
     const imageThumbnail = work.images && work.images.length > 0 ? `
         <div class="mt-3 mb-2">
             <div class="flex gap-2 overflow-x-auto">
@@ -1957,11 +1567,9 @@ function createWorkCard(work) {
     ` : '';
     
     return `
-        <div class="work-card p-6 animate-fade-in ${isOverdueWork ? 'ring-2 ring-red-200 bg-red-50' : ''}" onclick="showWorkDetails(${work.id})">
-            ${overdueIndicator}
-            
+        <div class="work-card p-6 animate-fade-in ${isOverdueWork ? 'ring-2 ring-red-200 bg-red-50' : ''}" data-work-id="${work.id}">
             <div class="flex justify-between items-start mb-4">
-                <div class="flex-1 min-w-0 pr-2">
+                <div class="flex-1 min-w-0 pr-2" onclick="showWorkDetails(${work.id})">
                     <h3 class="font-semibold text-gray-800 text-lg mb-1 truncate ${isOverdueWork ? 'text-red-800' : ''}">${work.work_name}</h3>
                     <p class="text-sm text-gray-600 mb-2 truncate">${work.category || 'No Category'}</p>
                 </div>
@@ -1977,7 +1585,7 @@ function createWorkCard(work) {
             
             ${imageThumbnail}
             
-            <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center justify-between mb-4" onclick="showWorkDetails(${work.id})">
                 <div class="flex items-center gap-2 min-w-0 flex-1">
                     <img src="${avatar}" alt="${work.assigned_staff}" class="w-8 h-8 rounded-full object-cover flex-shrink-0">
                     <span class="text-sm font-medium text-gray-700 truncate">${work.assigned_staff}</span>
@@ -1987,7 +1595,7 @@ function createWorkCard(work) {
                 </span>
             </div>
             
-            <div class="flex items-center justify-between text-sm text-gray-500">
+            <div class="flex items-center justify-between text-sm text-gray-500" onclick="showWorkDetails(${work.id})">
                 <div class="flex items-center gap-4 min-w-0 flex-1">
                     <div class="flex items-center gap-1 ${isOverdueWork ? 'text-red-600 font-medium' : ''} min-w-0">
                         <svg class="w-4 h-4 ${isOverdueWork ? 'text-red-500' : ''} flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2031,9 +1639,8 @@ function createWorkCard(work) {
     `;
 }
 
-// == IMPROVED STATUS DROPDOWN FUNCTION ==
+// == STATUS DROPDOWN WITH PROPER DROPDOWN FUNCTIONALITY ==
 function showStatusDropdown(workId, currentStatus, buttonElement) {
-    // Close any existing status dropdowns
     document.querySelectorAll('.status-dropdown-menu').forEach(dropdown => {
         dropdown.remove();
     });
@@ -2042,6 +1649,7 @@ function showStatusDropdown(workId, currentStatus, buttonElement) {
         { value: 'Pending', color: 'bg-orange-100 text-orange-800', icon: '⏳' },
         { value: 'In Progress', color: 'bg-blue-100 text-blue-800', icon: '🔄' },
         { value: 'Proof', color: 'bg-purple-100 text-purple-800', icon: '🎯' },
+        { value: 'Unpaid', color: 'bg-red-100 text-red-800', icon: '💸' },
         { value: 'Completed', color: 'bg-green-100 text-green-800', icon: '✅' }
     ];
     
@@ -2056,11 +1664,9 @@ function showStatusDropdown(workId, currentStatus, buttonElement) {
         </button>
     `).join('');
     
-    // Position dropdown relative to button
     const container = buttonElement.closest('.status-dropdown');
     container.appendChild(dropdown);
     
-    // Close dropdown when clicking outside
     setTimeout(() => {
         const closeHandler = (e) => {
             if (!dropdown.contains(e.target) && e.target !== buttonElement) {
@@ -2072,9 +1678,8 @@ function showStatusDropdown(workId, currentStatus, buttonElement) {
     }, 100);
 }
 
-// == WORK ACTIONS ==
+// == UPDATED: WORK ACTIONS - STATUS CHANGE WITHOUT POPUP ==
 async function changeWorkStatus(workId, newStatus) {
-    // Prevent multiple simultaneous updates
     if (statusUpdateInProgress.has(workId)) return;
     
     statusUpdateInProgress.add(workId);
@@ -2087,20 +1692,19 @@ async function changeWorkStatus(workId, newStatus) {
         
         if (error) throw error;
         
-        // Update local state immediately for responsiveness
         const workIndex = works.findIndex(w => w.id === workId);
         if (workIndex !== -1) {
             works[workIndex].status = newStatus;
+            works[workIndex].updated_at = new Date().toISOString();
         }
         
-        // Re-render immediately
         renderWorks();
         updateStats();
         updateMemberTiles();
+        updateRecentActivity();
         
-        showToast(`✅ Status updated to ${newStatus}`, 'success');
+        showConsoleMessage(`✅ Status updated to ${newStatus}`);
         
-        // Show browser notification
         const work = works.find(w => w.id === workId);
         if (work) {
             showBrowserNotification('🔄 Status Updated', {
@@ -2109,16 +1713,13 @@ async function changeWorkStatus(workId, newStatus) {
             });
         }
         
-        // Force refresh from database after a delay to ensure consistency
         setTimeout(async () => {
             await refreshWorks();
         }, 1000);
         
     } catch (error) {
         console.error('Error updating work status:', error);
-        showToast('❌ Failed to update status', 'error');
-        
-        // Refresh on error to restore correct state
+        showConsoleMessage('❌ Failed to update status');
         await refreshWorks();
     } finally {
         statusUpdateInProgress.delete(workId);
@@ -2143,13 +1744,13 @@ function showWorkDetails(workId) {
         'Pending': 'bg-orange-100 text-orange-800',
         'In Progress': 'bg-blue-100 text-blue-800',
         'Proof': 'bg-purple-100 text-purple-800',
+        'Unpaid': 'bg-red-100 text-red-800',
         'Completed': 'bg-green-100 text-green-800'
     };
     
     const isOverdueWork = isOverdue(work);
     const deadlineText = formatDeadline(work);
     
-    // Generate images section
     const imagesSection = work.images && work.images.length > 0 ? `
         <div>
             <h4 class="font-semibold text-gray-800 mb-2">Images (${work.images.length})</h4>
@@ -2165,7 +1766,6 @@ function showWorkDetails(workId) {
     
     const content = `
         <div class="space-y-6">
-            <!-- Header -->
             <div class="border-b border-gray-200 pb-4">
                 <div class="flex justify-between items-start mb-2">
                     <h3 class="text-xl font-bold text-gray-800">${work.work_name}</h3>
@@ -2178,7 +1778,6 @@ function showWorkDetails(workId) {
                 <p class="text-gray-600">${work.category || 'No Category'}</p>
             </div>
             
-            <!-- Description -->
             ${work.description ? `
                 <div>
                     <h4 class="font-semibold text-gray-800 mb-2">Description</h4>
@@ -2188,28 +1787,6 @@ function showWorkDetails(workId) {
             
             ${imagesSection}
             
-            <!-- Pricing Information -->
-            ${work.mrp || work.quotation_rate ? `
-                <div>
-                    <h4 class="font-semibold text-gray-800 mb-2">Pricing</h4>
-                    <div class="grid grid-cols-2 gap-4">
-                        ${work.mrp ? `
-                            <div class="bg-gray-50 p-3 rounded-lg">
-                                <div class="text-sm text-gray-600">MRP</div>
-                                <div class="text-lg font-semibold text-gray-800">₹${work.mrp}</div>
-                            </div>
-                        ` : ''}
-                        ${work.quotation_rate ? `
-                            <div class="bg-gray-50 p-3 rounded-lg">
-                                <div class="text-sm text-gray-600">Quotation Rate</div>
-                                <div class="text-lg font-semibold text-gray-800">₹${work.quotation_rate}</div>
-                            </div>
-                        ` : ''}
-                    </div>
-                </div>
-            ` : ''}
-            
-            <!-- Assignment & Timeline -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <h4 class="font-semibold text-gray-800 mb-2">Assigned To</h4>
@@ -2234,7 +1811,6 @@ function showWorkDetails(workId) {
                 </div>
             </div>
             
-            <!-- Deadline -->
             ${work.deadline ? `
                 <div>
                     <h4 class="font-semibold text-gray-800 mb-2">Deadline</h4>
@@ -2248,17 +1824,22 @@ function showWorkDetails(workId) {
                 </div>
             ` : ''}
             
-            <!-- Contact -->
             ${work.whatsapp_number ? `
                 <div>
                     <h4 class="font-semibold text-gray-800 mb-2">Contact</h4>
                     <button onclick="copyToClipboard('${work.whatsapp_number}')" 
                             class="flex items-center gap-3 bg-green-50 hover:bg-green-100 p-3 rounded-lg transition-colors w-full text-left">
                         <svg class="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0
+                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.394"></path>
+                        </svg>
+                        <div>
+                            <div class="font-medium text-gray-800">${work.whatsapp_number}</div>
+                            <div class="text-sm text-gray-600">Click to copy</div>
+                        </div>
+                    </button>
+                </div>
             ` : ''}
             
-            <!-- Actions -->
             <div class="flex gap-3 pt-4 border-t border-gray-200">
                 <button onclick="editWork(${work.id}); closeWorkDetailsModal();" 
                         class="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center gap-2">
@@ -2287,13 +1868,9 @@ function editWork(workId) {
     if (!work) return;
     
     editingWorkId = workId;
-    resetUnsavedChanges();
-    
-    // Store current work images for editing
     currentWorkImages = work.images ? [...work.images] : [];
     editUploadedImages = [];
     
-    // Populate form fields
     document.getElementById('editWorkName').value = work.work_name || '';
     document.getElementById('editWorkCategory').value = work.category || '';
     document.getElementById('editWhatsappNumber').value = work.whatsapp_number || '';
@@ -2306,13 +1883,8 @@ function editWork(workId) {
     document.getElementById('editWorkDeadlineTime').value = work.deadline_time || '';
     document.getElementById('editWorkPriority').value = work.priority || 'Medium';
     
-    // Update image preview
     updateEditImagePreview();
-    
     document.getElementById('editWorkModal').classList.remove('hidden');
-    
-    // Set up change tracking after a short delay
-    setTimeout(trackChanges, 100);
 }
 
 async function executeDeleteWork(workId) {
@@ -2325,17 +1897,11 @@ async function executeDeleteWork(workId) {
         if (error) throw error;
         
         await refreshWorks();
-        showToast('✅ Work deleted successfully!', 'success');
-        
-        // Show browser notification
-        showBrowserNotification('❌ Work Deleted', {
-            body: 'A work item has been deleted',
-            tag: 'work-delete'
-        });
+        showConsoleMessage('✅ Work deleted successfully!');
         
     } catch (error) {
         console.error('Error deleting work:', error);
-        showToast('❌ Failed to delete work', 'error');
+        showConsoleMessage('❌ Failed to delete work');
     }
 }
 
@@ -2346,13 +1912,11 @@ function isOverdue(work) {
     const today = new Date();
     const deadline = new Date(work.deadline);
     
-    // If there's a deadline time, include it in comparison
     if (work.deadline_time) {
         const [hours, minutes] = work.deadline_time.split(':');
         deadline.setHours(parseInt(hours), parseInt(minutes), 0, 0);
         return deadline < today;
     } else {
-        // If no time specified, consider it overdue at end of deadline date
         deadline.setHours(23, 59, 59, 999);
         return deadline < today;
     }
@@ -2366,7 +1930,6 @@ function formatDeadline(work) {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     
-    // Reset times for date comparison
     const deadlineDate = new Date(deadline);
     deadlineDate.setHours(0, 0, 0, 0);
     const todayDate = new Date(today);
@@ -2387,7 +1950,6 @@ function formatDeadline(work) {
         });
     }
     
-    // Add time if specified
     if (work.deadline_time) {
         const time = new Date(`2000-01-01T${work.deadline_time}`).toLocaleTimeString('en-US', {
             hour: 'numeric',
@@ -2436,7 +1998,6 @@ function updateDateTime() {
     }
 }
 
-// == STATS UPDATE ==
 function updateStats() {
     const totalWorksElement = document.getElementById('totalWorks');
     const pendingWorksElement = document.getElementById('pendingWorks');
@@ -2446,7 +2007,7 @@ function updateStats() {
     
     if (totalWorksElement) totalWorksElement.textContent = works.length;
     if (pendingWorksElement) pendingWorksElement.textContent = works.filter(w => w.status === 'Pending').length;
-    if (inProgressWorksElement) inProgressWorksElement.textContent = works.filter(w => w.status === 'In Progress').length;
+    if (inProgressWorksElement) inProgressWorksElement.textContent = works.filter(w => w.status === 'In Progress' || w.status === 'Proof').length;
     if (completedWorksElement) completedWorksElement.textContent = works.filter(w => w.status === 'Completed').length;
     
     if (dueTodayWorksElement) {
@@ -2462,13 +2023,16 @@ function updateStats() {
     }
 }
 
-// == RECENT ACTIVITY ==
 function updateRecentActivity() {
     const recentActivityElement = document.getElementById('recentActivity');
     if (!recentActivityElement) return;
     
     const recentWorks = works
-        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .sort((a, b) => {
+            const aDate = new Date(a.updated_at || a.created_at);
+            const bDate = new Date(b.updated_at || b.created_at);
+            return bDate - aDate;
+        })
         .slice(0, 5);
     
     if (recentWorks.length === 0) {
@@ -2481,44 +2045,45 @@ function updateRecentActivity() {
         const statusColors = {
             'Pending': 'bg-orange-100 text-orange-800',
             'In Progress': 'bg-blue-100 text-blue-800',
-            'Proof': 'bg-purple-100 text-purple-800', 
+            'Proof': 'bg-purple-100 text-purple-800',
+            'Unpaid': 'bg-red-100 text-red-800',
             'Completed': 'bg-green-100 text-green-800'
         };
+        
+        const activityDate = work.updated_at || work.created_at;
+        const isStatusUpdate = work.updated_at && work.updated_at !== work.created_at;
+        const activityText = isStatusUpdate ? 'Status updated' : 'Work created';
         
         return `
             <div class="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer" onclick="showWorkDetails(${work.id})">
                 <img src="${avatar}" alt="${work.assigned_staff}" class="w-8 h-8 rounded-full object-cover">
                 <div class="flex-1 min-w-0">
                     <div class="font-medium text-gray-800 truncate">${work.work_name}</div>
-                    <div class="text-sm text-gray-600">Assigned to ${work.assigned_staff}</div>
+                    <div class="text-sm text-gray-600">${activityText} • ${work.assigned_staff}</div>
                 </div>
                 <div class="flex flex-col items-end gap-1">
                     <span class="px-2 py-1 rounded-full text-xs font-medium ${statusColors[work.status]}">${work.status}</span>
-                    <span class="text-xs text-gray-500">${formatRelativeTime(work.created_at)}</span>
+                    <span class="text-xs text-gray-500">${formatRelativeTime(activityDate)}</span>
                 </div>
             </div>
         `;
     }).join('');
 }
 
-// == FORM RESET ==
 function resetForm() {
     const form = document.getElementById('workForm');
     if (form) {
         form.reset();
     }
     
-    // Reset custom dropdowns
     document.getElementById('categoryText').textContent = 'Select Category';
     document.getElementById('assignStaffText').textContent = 'Select Staff Member';
     document.getElementById('priorityText').textContent = 'Medium';
     
-    // Reset hidden inputs
     document.getElementById('workCategory').value = '';
     document.getElementById('assignStaff').value = '';
     document.getElementById('workPriority').value = 'Medium';
     
-    // Clear search
     const categorySearch = document.getElementById('categorySearch');
     if (categorySearch) {
         categorySearch.value = '';
@@ -2526,14 +2091,11 @@ function resetForm() {
     }
 }
 
-// == TAB MANAGEMENT ==
 function showTab(tabName) {
-    // Reset completed works flag when switching tabs (except when going to dashboard)
     if (tabName !== 'dashboard') {
         showCompletedWorks = false;
     }
     
-    // Update navigation tabs
     document.querySelectorAll('.nav-tab').forEach(tab => {
         tab.classList.remove('bg-primary', 'text-white');
         tab.classList.add('text-gray-600', 'hover:text-gray-800', 'hover:bg-gray-100');
@@ -2545,7 +2107,6 @@ function showTab(tabName) {
         activeTab.classList.remove('text-gray-600', 'hover:text-gray-800', 'hover:bg-gray-100');
     }
     
-    // Show selected tab content
     document.querySelectorAll('.tab-content').forEach(content => {
         content.classList.add('hidden');
     });
@@ -2555,17 +2116,14 @@ function showTab(tabName) {
         activeContent.classList.remove('hidden');
     }
     
-    // Update data when switching to specific tabs
     if (tabName === 'works') {
         renderWorks();
         updateMemberTiles();
     } else if (tabName === 'dashboard') {
         updateStats();
         updateRecentActivity();
-    } else if (tabName === 'notes') {
-        // Update notes stats when switching to notes tab
-        updateNotesStats();
-        updateTodoStats();
+    } else if (tabName === 'tasks') {
+        renderQuickTasks();
     }
 }
 
@@ -2580,7 +2138,7 @@ window.showStatusDropdown = showStatusDropdown;
 window.copyToClipboard = copyToClipboard;
 window.toggleNotifications = toggleNotifications;
 window.showLogoutConfirmation = showLogoutConfirmation;
-window.closeLogoutConfirmModal = closeLogoutConfirmModal; 
+window.closeLogoutConfirmModal = closeLogoutConfirmModal;
 window.confirmLogout = confirmLogout;
 window.showDeleteConfirmation = showDeleteConfirmation;
 window.closeDeleteConfirmModal = closeDeleteConfirmModal;
@@ -2588,9 +2146,6 @@ window.confirmDelete = confirmDelete;
 window.closeWorkDetailsModal = closeWorkDetailsModal;
 window.closeEditModal = closeEditModal;
 window.closeAddCategoryModal = closeAddCategoryModal;
-window.showUnsavedChangesModal = showUnsavedChangesModal;
-window.closeUnsavedChangesModal = closeUnsavedChangesModal;
-window.discardChanges = discardChanges;
 window.showAddCategoryModal = showAddCategoryModal;
 window.selectCategory = selectCategory;
 window.filterCategories = filterCategories;
@@ -2602,34 +2157,27 @@ window.selectMemberTile = selectMemberTile;
 window.goToWorksWithFilter = goToWorksWithFilter;
 window.selectStatusFilter = selectStatusFilter;
 window.selectCategoryFilter = selectCategoryFilter;
-window.selectDeadlineFilter = selectDeadlineFilter;
 window.selectCreatorFilter = selectCreatorFilter;
-window.selectSortFilter = selectSortFilter;
 window.toggleStatusDropdown = toggleStatusDropdown;
 window.toggleCategoryDropdown = toggleCategoryDropdown;
-window.toggleDeadlineDropdown = toggleDeadlineDropdown;
 window.toggleCreatorDropdown = toggleCreatorDropdown;
-window.toggleSortDropdown = toggleSortDropdown;
 window.toggleAssignStaffDropdown = toggleAssignStaffDropdown;
 window.togglePriorityDropdown = togglePriorityDropdown;
 window.toggleCategorySearchDropdown = toggleCategorySearchDropdown;
 window.toggleProfileDropdown = toggleProfileDropdown;
 
-// Notes functions
-window.handleNotesInput = handleNotesInput;
-window.clearNotes = clearNotes;
-window.closeClearNotesModal = closeClearNotesModal;
-window.confirmClearNotes = confirmClearNotes;
-window.copyNotesToClipboard = copyNotesToClipboard;
+// UPDATED: Real-time search function (no dropdown)
+window.handleRealTimeSearch = handleRealTimeSearch;
 
-// Todo functions
-window.addTodo = addTodo;
-window.handleTodoKeyPress = handleTodoKeyPress;
-window.toggleTodo = toggleTodo;
-window.deleteTodo = deleteTodo;
-window.clearTodos = clearTodos;
-window.closeClearTodosModal = closeClearTodosModal;
-window.confirmClearTodos = confirmClearTodos;
+// Quick tasks functions
+window.showAddQuickTaskModal = showAddQuickTaskModal;
+window.closeAddQuickTaskModal = closeAddQuickTaskModal;
+window.selectQuickTaskStaff = selectQuickTaskStaff;
+window.setQuickTaskDate = setQuickTaskDate;
+window.clearQuickTaskDate = clearQuickTaskDate;
+window.toggleQuickTaskStaffDropdown = toggleQuickTaskStaffDropdown;
+window.toggleQuickTask = toggleQuickTask;
+window.deleteQuickTask = deleteQuickTask;
 
 // Image functions
 window.handleImageUpload = handleImageUpload;
