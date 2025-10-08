@@ -25,6 +25,7 @@ let currentWorkId = null;
 let editingWorkId = null;
 let deleteWorkId = null;
 let showCompletedWorks = false;
+let showUnpaidWorks = false; // UPDATED: New state for unpaid works
 let statusUpdateInProgress = new Set();
 let currentFilters = {
     member: 'all',
@@ -34,12 +35,62 @@ let currentFilters = {
     category: 'all'
 };
 let notificationsEnabled = false;
-let currentSearchTerm = ''; // UPDATED: For real-time search
+let currentSearchTerm = '';
 
 // Image upload variables
 let uploadedImages = [];
 let editUploadedImages = [];
 let currentWorkImages = [];
+
+// == UPDATED: NOTIFICATION SYSTEM ==
+function showNotification(message, type = 'info', duration = 4000) {
+    const container = document.getElementById('notificationContainer');
+    if (!container) return;
+    
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `notification-toast ${type}`;
+    
+    // Determine icon based on type
+    let icon = '';
+    switch (type) {
+        case 'success':
+            icon = '<svg class="notification-icon success" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+            break;
+        case 'error':
+            icon = '<svg class="notification-icon error" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+            break;
+        case 'warning':
+            icon = '<svg class="notification-icon warning" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path></svg>';
+            break;
+        default: // info
+            icon = '<svg class="notification-icon info" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+    }
+    
+    notification.innerHTML = `
+        ${icon}
+        <div class="notification-message">${message}</div>
+    `;
+    
+    // Add click to dismiss
+    notification.onclick = () => {
+        notification.style.opacity = '0';
+        notification.style.transform = 'translateX(100%)';
+        setTimeout(() => notification.remove(), 300);
+    };
+    
+    // Add to container
+    container.appendChild(notification);
+    
+    // Auto remove after duration
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.style.opacity = '0';
+            notification.style.transform = 'translateX(100%)';
+            setTimeout(() => notification.remove(), 300);
+        }
+    }, duration);
+}
 
 // == INITIALIZATION ==
 document.addEventListener('DOMContentLoaded', async function() {
@@ -108,7 +159,7 @@ async function refreshQuickTasks() {
         renderQuickTasks();
     } catch (error) {
         console.error('Error fetching quick tasks:', error);
-        showConsoleMessage('❌ Failed to refresh quick tasks');
+        showNotification('❌ Failed to refresh quick tasks', 'error');
     }
 }
 
@@ -208,10 +259,10 @@ async function toggleQuickTask(taskId) {
         task.completed = !task.completed;
         renderQuickTasks();
         
-        showConsoleMessage(task.completed ? '✅ Task completed!' : '🔄 Task marked as pending');
+        showNotification(task.completed ? '✅ Task completed!' : '🔄 Task marked as pending', 'success');
     } catch (error) {
         console.error('Error updating task:', error);
-        showConsoleMessage('❌ Failed to update task');
+        showNotification('❌ Failed to update task', 'error');
     }
 }
 
@@ -229,10 +280,10 @@ async function deleteQuickTask(taskId) {
         quickTasks = quickTasks.filter(t => t.id !== taskId);
         renderQuickTasks();
         
-        showConsoleMessage('🗑️ Task deleted successfully');
+        showNotification('🗑️ Task deleted successfully', 'success');
     } catch (error) {
         console.error('Error deleting task:', error);
-        showConsoleMessage('❌ Failed to delete task');
+        showNotification('❌ Failed to delete task', 'error');
     }
 }
 
@@ -301,7 +352,7 @@ function toggleQuickTaskStaffDropdown() {
 // == UPDATED: REAL-TIME SEARCH FUNCTIONALITY ==
 function handleRealtimeSearch(searchTerm) {
     currentSearchTerm = searchTerm.toLowerCase().trim();
-    renderWorks(); // This will automatically filter and render works
+    renderWorks();
 }
 
 // == PROFILE DROPDOWN ==
@@ -381,7 +432,7 @@ async function processImages(files, isEdit = false) {
     
     for (const file of files) {
         if (file.size > 10 * 1024 * 1024) {
-            showConsoleMessage('❌ File too large. Maximum size is 10MB');
+            showNotification('❌ File too large. Maximum size is 10MB', 'error');
             continue;
         }
         
@@ -415,7 +466,7 @@ async function processImages(files, isEdit = false) {
             
         } catch (error) {
             console.error('Error uploading image:', error);
-            showConsoleMessage('❌ Failed to upload image: ' + file.name);
+            showNotification('❌ Failed to upload image: ' + file.name, 'error');
         }
         
         processedFiles++;
@@ -430,7 +481,7 @@ async function processImages(files, isEdit = false) {
         }, 1000);
     }
     
-    showConsoleMessage(`✅ ${processedFiles} image(s) uploaded successfully`);
+    showNotification(`✅ ${processedFiles} image(s) uploaded successfully`, 'success');
 }
 
 function compressImage(file, quality) {
@@ -643,7 +694,7 @@ async function refreshCategories() {
         populateCategoryDropdowns();
     } catch (error) {
         console.error('Error fetching categories:', error);
-        showConsoleMessage('❌ Failed to refresh categories');
+        showNotification('❌ Failed to refresh categories', 'error');
     }
 }
 
@@ -751,12 +802,12 @@ function setupFormHandlers() {
             const category = document.getElementById('workCategory').value;
             
             if (!assignedStaff) {
-                showConsoleMessage('❌ Please select a staff member');
+                showNotification('❌ Please select a staff member', 'error');
                 return;
             }
             
             if (!category) {
-                showConsoleMessage('❌ Please select a category');
+                showNotification('❌ Please select a category', 'error');
                 return;
             }
             
@@ -789,7 +840,7 @@ function setupFormHandlers() {
                 updateImagePreview();
                 await refreshWorks();
                 showTab('works');
-                showConsoleMessage('✅ Work added successfully!');
+                showNotification('✅ Work added successfully!', 'success');
                 
                 if (assignedStaff !== currentUser) {
                     await createNotification(
@@ -805,7 +856,7 @@ function setupFormHandlers() {
                 
             } catch (error) {
                 console.error('Error adding work:', error);
-                showConsoleMessage('❌ Failed to add work');
+                showNotification('❌ Failed to add work', 'error');
             }
         });
     }
@@ -818,7 +869,7 @@ function setupFormHandlers() {
             const categoryName = document.getElementById('newCategoryName').value.trim();
             
             if (!categoryName) {
-                showConsoleMessage('❌ Please enter a category name');
+                showNotification('❌ Please enter a category name', 'error');
                 return;
             }
             
@@ -827,7 +878,7 @@ function setupFormHandlers() {
             );
             
             if (existingCategory) {
-                showConsoleMessage('❌ Category already exists');
+                showNotification('❌ Category already exists', 'error');
                 return;
             }
             
@@ -847,11 +898,11 @@ function setupFormHandlers() {
                 
                 document.getElementById('addCategoryModal').classList.add('hidden');
                 document.getElementById('addCategoryForm').reset();
-                showConsoleMessage('✅ Category added successfully!');
+                showNotification('✅ Category added successfully!', 'success');
                 
             } catch (error) {
                 console.error('Error adding category:', error);
-                showConsoleMessage('❌ Failed to add category');
+                showNotification('❌ Failed to add category', 'error');
             }
         });
     }
@@ -866,12 +917,12 @@ function setupFormHandlers() {
             const dueDate = document.getElementById('quickTaskDate').value;
             
             if (!taskName) {
-                showConsoleMessage('❌ Please enter a task name');
+                showNotification('❌ Please enter a task name', 'error');
                 return;
             }
             
             if (!assignedStaff) {
-                showConsoleMessage('❌ Please select a staff member');
+                showNotification('❌ Please select a staff member', 'error');
                 return;
             }
             
@@ -892,11 +943,11 @@ function setupFormHandlers() {
                 
                 await refreshQuickTasks();
                 closeAddQuickTaskModal();
-                showConsoleMessage('✅ Quick task added successfully!');
+                showNotification('✅ Quick task added successfully!', 'success');
                 
             } catch (error) {
                 console.error('Error adding quick task:', error);
-                showConsoleMessage('❌ Failed to add quick task');
+                showNotification('❌ Failed to add quick task', 'error');
             }
         });
     }
@@ -950,11 +1001,11 @@ function setupFormHandlers() {
                 currentWorkImages = [];
                 
                 await refreshWorks();
-                showConsoleMessage('✅ Work updated successfully!');
+                showNotification('✅ Work updated successfully!', 'success');
                 
             } catch (error) {
                 console.error('Error updating work:', error);
-                showConsoleMessage('❌ Failed to update work');
+                showNotification('❌ Failed to update work', 'error');
             }
         });
     }
@@ -1116,6 +1167,7 @@ function cancelAddWork() {
 // == CLEAR FILTERS ==
 function clearAllFilters() {
     showCompletedWorks = false;
+    showUnpaidWorks = false; // UPDATED: Clear unpaid filter
     currentFilters = {
         member: 'all',
         status: 'all',
@@ -1124,7 +1176,6 @@ function clearAllFilters() {
         category: 'all'
     };
     
-    // Clear search term
     currentSearchTerm = '';
     document.getElementById('workSearchInput').value = '';
     
@@ -1138,7 +1189,7 @@ function clearAllFilters() {
     renderWorks();
     updateMemberTiles();
     updateStats();
-    showConsoleMessage('🔄 All filters cleared');
+    showNotification('🔄 All filters cleared', 'info');
 }
 
 // == MEMBER TILES ==
@@ -1160,7 +1211,15 @@ function selectMemberTile(member) {
 }
 
 function updateMemberTiles() {
-    const worksToCount = showCompletedWorks ? works : works.filter(w => w.status !== 'Completed');
+    // UPDATED: Exclude unpaid works from member tile counts unless showing unpaid
+    let worksToCount = works;
+    if (!showCompletedWorks && !showUnpaidWorks) {
+        worksToCount = works.filter(w => w.status !== 'Completed' && w.status !== 'Unpaid');
+    } else if (showCompletedWorks) {
+        worksToCount = works.filter(w => w.status === 'Completed');
+    } else if (showUnpaidWorks) {
+        worksToCount = works.filter(w => w.status === 'Unpaid');
+    }
     
     const counts = {
         all: worksToCount.length,
@@ -1188,25 +1247,30 @@ function updateMemberTiles() {
     });
 }
 
-// == DASHBOARD NAVIGATION ==
+// == UPDATED: DASHBOARD NAVIGATION WITH UNPAID SUPPORT ==
 function goToWorksWithFilter(filterType) {
     showTab('works');
     
-    if (filterType === 'Pending') {
-        showCompletedWorks = false;
-        selectStatusFilter('Pending');
-    } else if (filterType === 'In Progress') {
-        showCompletedWorks = false;
-        selectStatusFilter('In Progress');
+    // Reset filter states
+    showCompletedWorks = false;
+    showUnpaidWorks = false;
+    
+    if (filterType === 'Active') {
+        // Show pending + in progress + proof works
+        currentFilters.status = 'all';
+        currentFilters.member = 'all';
+        renderWorks();
     } else if (filterType === 'Completed') {
         showCompletedWorks = true;
         selectStatusFilter('Completed');
+    } else if (filterType === 'Unpaid') {
+        // UPDATED: New unpaid filter
+        showUnpaidWorks = true;
+        selectStatusFilter('Unpaid');
     } else if (filterType === 'today') {
-        showCompletedWorks = false;
         currentFilters.deadline = 'today';
         renderWorks();
     } else if (filterType === 'all') {
-        showCompletedWorks = false;
         selectStatusFilter('all');
     }
 }
@@ -1240,28 +1304,39 @@ function toggleNotifications() {
     if (!notificationsEnabled) {
         requestNotificationPermission().then(() => {
             if (notificationsEnabled) {
-                showConsoleMessage('✅ Browser notifications enabled successfully!');
+                showNotification('✅ Browser notifications enabled successfully!', 'success');
             } else {
-                showConsoleMessage('❌ Notification permission denied');
+                showNotification('❌ Notification permission denied', 'error');
             }
         });
     } else {
-        showConsoleMessage('🔔 Notifications are already enabled!');
+        showNotification('🔔 Notifications are already enabled!', 'info');
     }
 }
 
-// == CONSOLE MESSAGES (REPLACING TOASTS) ==
-function showConsoleMessage(message) {
-    console.log(message);
-}
-
-function copyToClipboard(text) {
+// == UPDATED: WHATSAPP COPY WITH NOTIFICATION ==
+function copyToClipboard(text, buttonElement) {
     navigator.clipboard.writeText(text).then(() => {
-        showConsoleMessage('📋 WhatsApp number copied to clipboard!');
+        // Show simple "Copied!" near the button
+        const copiedText = document.createElement('div');
+        copiedText.textContent = 'Copied!';
+        copiedText.className = 'absolute -top-8 left-1/2 transform -translate-x-1/2 bg-green-600 text-white text-xs px-2 py-1 rounded shadow-lg z-50';
+        buttonElement.appendChild(copiedText);
+        
+        // Remove after 2 seconds
+        setTimeout(() => {
+            if (copiedText.parentNode) {
+                copiedText.remove();
+            }
+        }, 2000);
+        
+        // Also show the toast notification
+        showNotification('📋 WhatsApp number copied to clipboard!', 'success');
     }).catch(() => {
-        showConsoleMessage('❌ Failed to copy to clipboard');
+        showNotification('❌ Failed to copy to clipboard', 'error');
     });
 }
+
 
 // == USER AUTHENTICATION ==
 function loginUser(name, role) {
@@ -1292,7 +1367,7 @@ function loginUser(name, role) {
         updateMemberTiles();
         showTab('dashboard');
         
-        showConsoleMessage(`👋 Welcome back, ${name}!`);
+        showNotification(`👋 Welcome back, ${name}!`, 'success');
     });
 }
 
@@ -1307,6 +1382,7 @@ function executeLogout() {
     categories = [];
     quickTasks = [];
     showCompletedWorks = false;
+    showUnpaidWorks = false;
     uploadedImages = [];
     editUploadedImages = [];
     currentWorkImages = [];
@@ -1316,7 +1392,7 @@ function executeLogout() {
     
     resetForm();
     
-    showConsoleMessage('👋 Logged out successfully');
+    showNotification('👋 Logged out successfully', 'info');
 }
 
 // == SETUP MEMBER FILTERS ==
@@ -1392,15 +1468,15 @@ async function refreshWorks() {
         updateRecentActivity();
     } catch (error) {
         console.error('Error fetching works:', error);
-        showConsoleMessage('❌ Failed to refresh works');
+        showNotification('❌ Failed to refresh works', 'error');
     }
 }
 
-// == UPDATED: FILTER WORKS WITH SEARCH ==
+// == UPDATED: FILTER WORKS WITH UNPAID EXCLUSION ==
 function filterWorks() {
     let filteredWorks = [...works];
     
-    // Apply search filter first (only work name and description)
+    // Apply search filter first
     if (currentSearchTerm) {
         filteredWorks = filteredWorks.filter(work => {
             const workName = (work.work_name || '').toLowerCase();
@@ -1411,8 +1487,18 @@ function filterWorks() {
         });
     }
     
-    if (!showCompletedWorks) {
-        filteredWorks = filteredWorks.filter(work => work.status !== 'Completed');
+    // UPDATED: Handle different view modes
+    if (showUnpaidWorks) {
+        // Show only unpaid works
+        filteredWorks = filteredWorks.filter(work => work.status === 'Unpaid');
+    } else if (showCompletedWorks) {
+        // Show only completed works
+        filteredWorks = filteredWorks.filter(work => work.status === 'Completed');
+    } else {
+        // UPDATED: Exclude both completed and unpaid works from main view
+        filteredWorks = filteredWorks.filter(work => 
+            work.status !== 'Completed' && work.status !== 'Unpaid'
+        );
     }
     
     if (currentFilters.member !== 'all') {
@@ -1494,7 +1580,7 @@ function renderWorks() {
     container.innerHTML = filteredWorks.map(work => createWorkCard(work)).join('');
 }
 
-// == UPDATED: WORK CARD WITH FIXED STATUS DROPDOWN ==
+// == UPDATED: WORK CARD WITH PROPER STATUS OPTIONS ==
 function createWorkCard(work) {
     const isOverdueWork = isOverdue(work);
     const deadlineText = formatDeadline(work);
@@ -1566,8 +1652,9 @@ function createWorkCard(work) {
                         ${isOverdueWork ? '<span class="text-red-500 font-bold flex-shrink-0">⚠️</span>' : ''}
                     </div>
                     ${work.whatsapp_number ? `
-                        <button onclick="event.stopPropagation(); copyToClipboard('${work.whatsapp_number}')" 
-                                class="flex items-center gap-1 text-green-600 hover:text-green-700 transition-colors flex-shrink-0">
+                        <button onclick="event.stopPropagation(); copyToClipboard('${work.whatsapp_number}', this)" 
+                            class="flex items-center gap-1 text-green-600 hover:text-green-700 transition-colors flex-shrink-0 relative">
+
                             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                                 <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.394"></path>
                             </svg>
@@ -1600,9 +1687,8 @@ function createWorkCard(work) {
     `;
 }
 
-// == STATUS DROPDOWN - UPDATED: NO POPUP ON STATUS CHANGE ==
+// == STATUS DROPDOWN ==
 function showStatusDropdown(workId, currentStatus, buttonElement) {
-    // Remove any existing dropdowns
     document.querySelectorAll('.status-dropdown-menu').forEach(dropdown => {
         dropdown.remove();
     });
@@ -1640,7 +1726,7 @@ function showStatusDropdown(workId, currentStatus, buttonElement) {
     }, 100);
 }
 
-// == UPDATED: STATUS CHANGE FUNCTION - NO POPUP ==
+// == STATUS CHANGE FUNCTION ==
 async function changeWorkStatusOnly(workId, newStatus) {
     if (statusUpdateInProgress.has(workId)) return;
     
@@ -1665,7 +1751,7 @@ async function changeWorkStatusOnly(workId, newStatus) {
         updateMemberTiles();
         updateRecentActivity();
         
-        showConsoleMessage(`✅ Status updated to ${newStatus}`);
+        showNotification(`✅ Status updated to ${newStatus}`, 'success');
         
         const work = works.find(w => w.id === workId);
         if (work) {
@@ -1681,7 +1767,7 @@ async function changeWorkStatusOnly(workId, newStatus) {
         
     } catch (error) {
         console.error('Error updating work status:', error);
-        showConsoleMessage('❌ Failed to update status');
+        showNotification('❌ Failed to update status', 'error');
         await refreshWorks();
     } finally {
         statusUpdateInProgress.delete(workId);
@@ -1789,7 +1875,7 @@ function showWorkDetails(workId) {
             ${work.whatsapp_number ? `
                 <div>
                     <h4 class="font-semibold text-gray-800 mb-2">Contact</h4>
-                    <button onclick="copyToClipboard('${work.whatsapp_number}')" 
+                    <button onclick="copyToClipboard('${work.whatsapp_number}', this)" 
                             class="flex items-center gap-3 bg-green-50 hover:bg-green-100 p-3 rounded-lg transition-colors w-full text-left">
                         <svg class="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.394"></path>
@@ -1859,11 +1945,11 @@ async function executeDeleteWork(workId) {
         if (error) throw error;
         
         await refreshWorks();
-        showConsoleMessage('✅ Work deleted successfully!');
+        showNotification('✅ Work deleted successfully!', 'success');
         
     } catch (error) {
         console.error('Error deleting work:', error);
-        showConsoleMessage('❌ Failed to delete work');
+        showNotification('❌ Failed to delete work', 'error');
     }
 }
 
@@ -1960,16 +2046,19 @@ function updateDateTime() {
     }
 }
 
+// == UPDATED: STATS WITH ACTIVE WORKS AND UNPAID ==
 function updateStats() {
     const totalWorksElement = document.getElementById('totalWorks');
-    const pendingWorksElement = document.getElementById('pendingWorks');
-    const inProgressWorksElement = document.getElementById('inProgressWorks');
+    const activeWorksElement = document.getElementById('activeWorks');
+    const unpaidWorksElement = document.getElementById('unpaidWorks');
     const completedWorksElement = document.getElementById('completedWorks');
     const dueTodayWorksElement = document.getElementById('dueTodayWorks');
     
     if (totalWorksElement) totalWorksElement.textContent = works.length;
-    if (pendingWorksElement) pendingWorksElement.textContent = works.filter(w => w.status === 'Pending').length;
-    if (inProgressWorksElement) inProgressWorksElement.textContent = works.filter(w => w.status === 'In Progress' || w.status === 'Proof').length;
+    if (activeWorksElement) activeWorksElement.textContent = works.filter(w => 
+        w.status === 'Pending' || w.status === 'In Progress' || w.status === 'Proof'
+    ).length;
+    if (unpaidWorksElement) unpaidWorksElement.textContent = works.filter(w => w.status === 'Unpaid').length;
     if (completedWorksElement) completedWorksElement.textContent = works.filter(w => w.status === 'Completed').length;
     
     if (dueTodayWorksElement) {
@@ -2054,7 +2143,6 @@ function resetForm() {
 }
 
 function showTab(tabName) {
-    // Clear search when switching tabs
     if (tabName !== 'works') {
         currentSearchTerm = '';
         const searchInput = document.getElementById('workSearchInput');
@@ -2065,6 +2153,7 @@ function showTab(tabName) {
     
     if (tabName !== 'dashboard') {
         showCompletedWorks = false;
+        showUnpaidWorks = false;
     }
     
     document.querySelectorAll('.nav-tab').forEach(tab => {
@@ -2111,6 +2200,7 @@ window.toggleNotifications = toggleNotifications;
 window.showLogoutConfirmation = showLogoutConfirmation;
 window.closeLogoutConfirmModal = closeLogoutConfirmModal;
 window.confirmLogout = confirmLogout;
+// == EXPOSE FUNCTIONS TO GLOBAL SCOPE (CONTINUED) ==
 window.showDeleteConfirmation = showDeleteConfirmation;
 window.closeDeleteConfirmModal = closeDeleteConfirmModal;
 window.confirmDelete = confirmDelete;

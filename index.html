@@ -22,6 +22,7 @@
             --animate-scale-in: scaleIn 0.2s ease-out;
             --animate-pulse: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
             --animate-spin: spin 1s linear infinite;
+            --animate-slide-up: slideUp 0.3s ease-out;
         }
         
         @keyframes fadeIn {
@@ -49,6 +50,11 @@
         @keyframes scaleIn {
             from { opacity: 0; transform: scale(0.95); }
             to { opacity: 1; transform: scale(1); }
+        }
+        
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         
         @keyframes pulse {
@@ -437,7 +443,7 @@
             color: white;
         }
         
-        /* UPDATED: Work Search - removed dropdown styles */
+        /* Work Search */
         .work-search-container {
             position: relative;
             max-width: 400px;
@@ -583,6 +589,89 @@
             background: #dc2626;
         }
         
+        /* UPDATED: Notification Toast Styles */
+        .notification-container {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            max-width: 400px;
+            pointer-events: none;
+        }
+        
+        .notification-toast {
+            background: white;
+            border-radius: 0.75rem;
+            padding: 1rem 1.5rem;
+            box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            border-left: 4px solid;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            animation: var(--animate-slide-up);
+            pointer-events: auto;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            max-width: 100%;
+            word-wrap: break-word;
+        }
+        
+        .notification-toast:hover {
+            transform: translateX(-4px);
+        }
+        
+        .notification-toast.success {
+            border-left-color: #10b981;
+            background: linear-gradient(90deg, #ecfdf5 0%, #ffffff 100%);
+        }
+        
+        .notification-toast.error {
+            border-left-color: #ef4444;
+            background: linear-gradient(90deg, #fef2f2 0%, #ffffff 100%);
+        }
+        
+        .notification-toast.info {
+            border-left-color: #3b82f6;
+            background: linear-gradient(90deg, #eff6ff 0%, #ffffff 100%);
+        }
+        
+        .notification-toast.warning {
+            border-left-color: #f59e0b;
+            background: linear-gradient(90deg, #fffbeb 0%, #ffffff 100%);
+        }
+        
+        .notification-icon {
+            flex-shrink: 0;
+            width: 1.25rem;
+            height: 1.25rem;
+        }
+        
+        .notification-icon.success {
+            color: #10b981;
+        }
+        
+        .notification-icon.error {
+            color: #ef4444;
+        }
+        
+        .notification-icon.info {
+            color: #3b82f6;
+        }
+        
+        .notification-icon.warning {
+            color: #f59e0b;
+        }
+        
+        .notification-message {
+            flex: 1;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #374151;
+        }
+        
         /* Mobile responsive styles */
         @media (max-width: 768px) {
             .hide-mobile {
@@ -632,6 +721,18 @@
             .work-search-container {
                 max-width: 100%;
             }
+            
+            .notification-container {
+                top: 0.5rem;
+                right: 0.5rem;
+                left: 0.5rem;
+                max-width: none;
+            }
+            
+            .notification-toast {
+                padding: 0.75rem 1rem;
+                font-size: 0.875rem;
+            }
         }
         
         @media (max-width: 640px) {
@@ -680,10 +781,19 @@
         .animate-spin {
             animation: var(--animate-spin);
         }
+        
+        .animate-slide-up {
+            animation: var(--animate-slide-up);
+        }
     </style>
 </head>
 
 <body class="bg-gray-50 min-h-screen">
+    <!-- UPDATED: Notification Container -->
+    <div id="notificationContainer" class="notification-container">
+        <!-- Notifications will be dynamically added here -->
+    </div>
+
     <!-- Login Screen -->
     <div id="loginScreen" class="min-h-screen gradient-bg flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md animate-fade-in">
@@ -753,7 +863,7 @@
                         <img src="logo.png" alt="Ace Creative" class="h-10 w-13 rounded-lg object-cover">
                         <div class="hide-mobile">
                             <div class="font-bold text-gray-800 text-lg">Ace Creative</div>
-                            <div class="text-xs text-gray-500">Work Management</div>
+                            <div class="text-xs text-gray-500">Work Management <span class=" border-1 px-2 rounded-xl text-red-600 font-bold">V3</span></div>
                         </div>
                     </div>
 
@@ -833,7 +943,7 @@
         <!-- Dashboard Tab -->
         <div id="dashboardContent" class="tab-content">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <!-- Stats Cards -->
+                <!-- UPDATED: Stats Cards with merged pending/in-progress and new unpaid card -->
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8 grid-mobile-2 md:grid-cols-3">
                     <div onclick="goToWorksWithFilter('all')" class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 card-hover transition-all duration-300 cursor-pointer p-mobile-sm">
                         <div class="flex items-center justify-between">
@@ -850,26 +960,12 @@
                         <div class="mt-2 text-xs text-gray-500">All assigned works • Click to view</div>
                     </div>
 
-                    <div onclick="goToWorksWithFilter('Pending')" class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 card-hover transition-all duration-300 cursor-pointer p-mobile-sm">
+                    <!-- UPDATED: Merged Pending & In Progress -->
+                    <div onclick="goToWorksWithFilter('Active')" class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 card-hover transition-all duration-300 cursor-pointer p-mobile-sm">
                         <div class="flex items-center justify-between">
                             <div>
-                                <p class="text-sm font-medium text-gray-600 text-mobile-sm">Pending</p>
-                                <p id="pendingWorks" class="text-3xl font-bold text-orange-600">0</p>
-                            </div>
-                            <div class="bg-orange-100 p-3 rounded-full">
-                                <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                </svg>
-                            </div>
-                        </div>
-                        <div class="mt-2 text-xs text-gray-500">Awaiting action • Click to view</div>
-                    </div>
-
-                    <div onclick="goToWorksWithFilter('In Progress')" class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 card-hover transition-all duration-300 cursor-pointer p-mobile-sm">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <p class="text-sm font-medium text-gray-600 text-mobile-sm">In Progress</p>
-                                <p id="inProgressWorks" class="text-3xl font-bold text-blue-600">0</p>
+                                <p class="text-sm font-medium text-gray-600 text-mobile-sm">Active Works</p>
+                                <p id="activeWorks" class="text-3xl font-bold text-blue-600">0</p>
                             </div>
                             <div class="bg-blue-100 p-3 rounded-full">
                                 <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -877,8 +973,27 @@
                                 </svg>
                             </div>
                         </div>
-                        <div class="mt-2 text-xs text-gray-500">Currently working • Click to view</div>
+                        <div class="mt-2 text-xs text-gray-500">Pending + In Progress + Proof • Click to view</div>
                     </div>
+
+                    <!-- UPDATED: New Unpaid Card with money SVG icon -->
+                    <div onclick="goToWorksWithFilter('Unpaid')" class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 card-hover transition-all duration-300 cursor-pointer p-mobile-sm">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-gray-600 text-mobile-sm">Unpaid</p>
+                                <p id="unpaidWorks" class="text-3xl font-bold text-red-600">0</p>
+                            </div>
+                            <div class="bg-red-100 p-3 rounded-full">
+                                <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="mt-2 text-xs text-gray-500">Payment pending • Click to view</div>
+                    </div>
+
+
+
 
                     <div onclick="goToWorksWithFilter('Completed')" class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 card-hover transition-all duration-300 cursor-pointer p-mobile-sm">
                         <div class="flex items-center justify-between">
@@ -963,7 +1078,7 @@
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 <!-- Search and Filters -->
                 <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 mb-6 p-mobile-sm">
-                    <!-- UPDATED: Search Bar - removed dropdown, now filters in real-time -->
+                    <!-- Search Bar -->
                     <div class="mb-6">
                         <div class="work-search-container mx-auto">
                             <div class="relative">
@@ -996,7 +1111,6 @@
                                 <div class="dropdown-item" onclick="selectStatusFilter('Pending')">Pending</div>
                                 <div class="dropdown-item" onclick="selectStatusFilter('In Progress')">In Progress</div>
                                 <div class="dropdown-item" onclick="selectStatusFilter('Proof')">Proof</div>
-                                <div class="dropdown-item" onclick="selectStatusFilter('Unpaid')">Unpaid</div>
                                 <div class="dropdown-item" onclick="selectStatusFilter('Completed')">Completed</div>
                             </div>
                         </div>
@@ -1039,7 +1153,7 @@
                         
                         <!-- Clear All Filters Button -->
                         <div class="flex items-end">
-                            <button onclick="clearAllFilters()" class="clear-filters-btn w-full h-14 flex items-center justify-center gap-2">
+                            <button onclick="clearAllFilters()" class="clear-filters-btn h-14.5 w-full flex items-center justify-center gap-2">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                                 </svg>
