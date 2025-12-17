@@ -7,12 +7,14 @@ const memberAvatars = {
     'Irshad': 'irshad.jpg',
     'Niyas': 'niyas.jpg',
     'Muhammed': 'muhammed.jpg',
+    'Noora': 'noora.jpg',
     'Najil': 'najil.jpg',
     'Safvan': 'safvan.jpg'
 };
 
 // == Initialize Supabase ==
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// == Initialize Supabase ==
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // == Global State ==
 let currentUser = null;
@@ -29,7 +31,7 @@ let showUnpaidWorks = false; // UPDATED: New state for unpaid works
 let statusUpdateInProgress = new Set();
 let currentFilters = {
     member: 'all',
-    status: 'all', 
+    status: 'all',
     deadline: 'all',
     creator: 'all',
     category: 'all'
@@ -46,11 +48,11 @@ let currentWorkImages = [];
 function showNotification(message, type = 'info', duration = 4000) {
     const container = document.getElementById('notificationContainer');
     if (!container) return;
-    
+
     // Create notification element
     const notification = document.createElement('div');
     notification.className = `notification-toast ${type}`;
-    
+
     // Determine icon based on type
     let icon = '';
     switch (type) {
@@ -66,22 +68,22 @@ function showNotification(message, type = 'info', duration = 4000) {
         default: // info
             icon = '<svg class="notification-icon info" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
     }
-    
+
     notification.innerHTML = `
         ${icon}
         <div class="notification-message">${message}</div>
     `;
-    
+
     // Add click to dismiss
     notification.onclick = () => {
         notification.style.opacity = '0';
         notification.style.transform = 'translateX(100%)';
         setTimeout(() => notification.remove(), 300);
     };
-    
+
     // Add to container
     container.appendChild(notification);
-    
+
     // Auto remove after duration
     setTimeout(() => {
         if (notification.parentNode) {
@@ -93,23 +95,23 @@ function showNotification(message, type = 'info', duration = 4000) {
 }
 
 // == INITIALIZATION ==
-document.addEventListener('DOMContentLoaded', async function() {
+document.addEventListener('DOMContentLoaded', async function () {
     updateDateTime();
     setInterval(updateDateTime, 1000);
-    
+
     sessionId = generateSessionId();
-    
+
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('sw.js').catch(err => console.log('SW registration failed'));
     }
-    
+
     await requestNotificationPermission();
     setupKeyboardEventListeners();
     setupImageUpload();
-    
+
     const savedUser = localStorage.getItem('currentUser');
     const savedRole = localStorage.getItem('currentUserRole');
-    
+
     if (savedUser && savedRole) {
         currentUser = savedUser;
         currentUserRole = savedRole;
@@ -118,18 +120,18 @@ document.addEventListener('DOMContentLoaded', async function() {
         document.getElementById('userName').textContent = savedUser;
         document.getElementById('profileUserName').textContent = savedUser;
         document.getElementById('userAvatar').src = memberAvatars[savedUser];
-        
+
         await Promise.all([
             refreshWorks(),
             refreshCategories(),
             refreshQuickTasks()
         ]);
-        
+
         setupMemberFilters();
         subscribeToWorks();
         subscribeToNotifications();
         subscribeToQuickTasks();
-        
+
         renderWorks();
         updateStats();
         updateMemberTiles();
@@ -148,14 +150,14 @@ function generateSessionId() {
 // == QUICK TASKS FUNCTIONALITY ==
 async function refreshQuickTasks() {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await sb
             .from('quick_tasks')
             .select('*')
             .order('created_at', { ascending: false });
-        
+
         if (error) throw error;
         quickTasks = data || [];
-        
+
         renderQuickTasks();
     } catch (error) {
         console.error('Error fetching quick tasks:', error);
@@ -166,23 +168,23 @@ async function refreshQuickTasks() {
 function renderQuickTasks() {
     const container = document.getElementById('quickTasksContainer');
     if (!container) return;
-    
+
     const addButton = container.querySelector('.add-task-btn');
     container.innerHTML = '';
     if (addButton) {
         container.appendChild(addButton);
     }
-    
+
     if (quickTasks.length === 0) {
         document.getElementById('noQuickTasks')?.classList.remove('hidden');
         return;
     }
-    
+
     document.getElementById('noQuickTasks')?.classList.add('hidden');
-    
+
     const today = new Date().toDateString();
     const tomorrow = new Date(Date.now() + 86400000).toDateString();
-    
+
     quickTasks.forEach(task => {
         const taskCard = createQuickTaskCard(task, today, tomorrow);
         container.appendChild(taskCard);
@@ -192,14 +194,14 @@ function renderQuickTasks() {
 function createQuickTaskCard(task, today, tomorrow) {
     const div = document.createElement('div');
     const avatar = memberAvatars[task.assigned_staff] || 'default-avatar.jpg';
-    
+
     let cardClass = 'quick-task-card';
     let dueDateText = '';
-    
+
     if (task.completed) {
         cardClass += ' completed';
     }
-    
+
     if (task.due_date) {
         const taskDate = new Date(task.due_date).toDateString();
         if (taskDate === today) {
@@ -212,7 +214,7 @@ function createQuickTaskCard(task, today, tomorrow) {
             dueDateText = `📆 ${new Date(task.due_date).toLocaleDateString()}`;
         }
     }
-    
+
     div.className = cardClass;
     div.innerHTML = `
         <div class="flex items-start justify-between mb-3">
@@ -240,7 +242,7 @@ function createQuickTaskCard(task, today, tomorrow) {
             Created ${formatRelativeTime(task.created_at)}
         </div>
     `;
-    
+
     return div;
 }
 
@@ -248,17 +250,17 @@ async function toggleQuickTask(taskId) {
     try {
         const task = quickTasks.find(t => t.id === taskId);
         if (!task) return;
-        
-        const { error } = await supabase
+
+        const { error } = await sb
             .from('quick_tasks')
             .update({ completed: !task.completed })
             .eq('id', taskId);
-        
+
         if (error) throw error;
-        
+
         task.completed = !task.completed;
         renderQuickTasks();
-        
+
         showNotification(task.completed ? '✅ Task completed!' : '🔄 Task marked as pending', 'success');
     } catch (error) {
         console.error('Error updating task:', error);
@@ -268,18 +270,18 @@ async function toggleQuickTask(taskId) {
 
 async function deleteQuickTask(taskId) {
     if (!confirm('Are you sure you want to delete this task?')) return;
-    
+
     try {
-        const { error } = await supabase
+        const { error } = await sb
             .from('quick_tasks')
             .delete()
             .eq('id', taskId);
-        
+
         if (error) throw error;
-        
+
         quickTasks = quickTasks.filter(t => t.id !== taskId);
         renderQuickTasks();
-        
+
         showNotification('🗑️ Task deleted successfully', 'success');
     } catch (error) {
         console.error('Error deleting task:', error);
@@ -318,10 +320,10 @@ function selectQuickTaskStaff(staffName) {
 
 function setQuickTaskDate(type) {
     clearQuickTaskDateButtons();
-    
+
     const today = new Date();
     let targetDate;
-    
+
     if (type === 'today') {
         targetDate = today;
         document.getElementById('todayBtn').classList.add('bg-yellow-100', 'border-yellow-300', 'text-yellow-800');
@@ -329,7 +331,7 @@ function setQuickTaskDate(type) {
         targetDate = new Date(today.getTime() + 86400000);
         document.getElementById('tomorrowBtn').classList.add('bg-blue-100', 'border-blue-300', 'text-blue-800');
     }
-    
+
     document.getElementById('quickTaskDate').value = targetDate.toISOString().split('T')[0];
 }
 
@@ -371,7 +373,7 @@ function toggleProfileDropdown() {
 function closeProfileDropdown(event) {
     const dropdown = document.getElementById('profileDropdownMenu');
     const profileArea = event.target.closest('.profile-dropdown');
-    
+
     if (!profileArea) {
         dropdown.classList.add('hidden');
         document.removeEventListener('click', closeProfileDropdown);
@@ -381,7 +383,7 @@ function closeProfileDropdown(event) {
 // == IMAGE UPLOAD FUNCTIONALITY ==
 function setupImageUpload() {
     const uploadArea = document.getElementById('imageUploadArea');
-    
+
     if (uploadArea) {
         uploadArea.addEventListener('dragover', handleDragOver);
         uploadArea.addEventListener('dragleave', handleDragLeave);
@@ -418,44 +420,44 @@ function handleEditImageUpload(event) {
 
 async function processImages(files, isEdit = false) {
     if (files.length === 0) return;
-    
+
     const progressContainer = document.getElementById('uploadProgress');
     const progressBar = document.getElementById('uploadProgressBar');
-    
+
     if (progressContainer && progressBar) {
         progressContainer.classList.remove('hidden');
         progressBar.style.width = '0%';
     }
-    
+
     const totalFiles = files.length;
     let processedFiles = 0;
-    
+
     for (const file of files) {
         if (file.size > 10 * 1024 * 1024) {
             showNotification('❌ File too large. Maximum size is 10MB', 'error');
             continue;
         }
-        
+
         try {
             const compressedFile = await compressImage(file, 0.6);
             const fileName = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${file.name.split('.').pop()}`;
-            
-            const { data, error } = await supabase.storage
+
+            const { data, error } = await sb.storage
                 .from('work-images')
                 .upload(fileName, compressedFile);
-            
+
             if (error) throw error;
-            
-            const { data: { publicUrl } } = supabase.storage
+
+            const { data: { publicUrl } } = sb.storage
                 .from('work-images')
                 .getPublicUrl(fileName);
-            
+
             const imageData = {
                 url: publicUrl,
                 name: file.name,
                 fileName: fileName
             };
-            
+
             if (isEdit) {
                 editUploadedImages.push(imageData);
                 updateEditImagePreview();
@@ -463,24 +465,24 @@ async function processImages(files, isEdit = false) {
                 uploadedImages.push(imageData);
                 updateImagePreview();
             }
-            
+
         } catch (error) {
             console.error('Error uploading image:', error);
             showNotification('❌ Failed to upload image: ' + file.name, 'error');
         }
-        
+
         processedFiles++;
         if (progressBar) {
             progressBar.style.width = `${(processedFiles / totalFiles) * 100}%`;
         }
     }
-    
+
     if (progressContainer) {
         setTimeout(() => {
             progressContainer.classList.add('hidden');
         }, 1000);
     }
-    
+
     showNotification(`✅ ${processedFiles} image(s) uploaded successfully`, 'success');
 }
 
@@ -489,29 +491,29 @@ function compressImage(file, quality) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         const img = new Image();
-        
+
         img.onload = () => {
             const maxWidth = 1920;
             const maxHeight = 1080;
             let { width, height } = img;
-            
+
             if (width > maxWidth) {
                 height = (height * maxWidth) / width;
                 width = maxWidth;
             }
-            
+
             if (height > maxHeight) {
                 width = (width * maxHeight) / height;
                 height = maxHeight;
             }
-            
+
             canvas.width = width;
             canvas.height = height;
-            
+
             ctx.drawImage(img, 0, 0, width, height);
             canvas.toBlob(resolve, 'image/jpeg', quality);
         };
-        
+
         img.src = URL.createObjectURL(file);
     });
 }
@@ -519,12 +521,12 @@ function compressImage(file, quality) {
 function updateImagePreview() {
     const container = document.getElementById('imagePreviewContainer');
     if (!container) return;
-    
+
     if (uploadedImages.length === 0) {
         container.classList.add('hidden');
         return;
     }
-    
+
     container.classList.remove('hidden');
     container.innerHTML = uploadedImages.map((image, index) => `
         <div class="image-item">
@@ -537,14 +539,14 @@ function updateImagePreview() {
 function updateEditImagePreview() {
     const container = document.getElementById('editImagePreviewContainer');
     if (!container) return;
-    
+
     const allImages = [...(currentWorkImages || []), ...editUploadedImages];
-    
+
     if (allImages.length === 0) {
         container.innerHTML = '';
         return;
     }
-    
+
     container.innerHTML = allImages.map((image, index) => {
         const isExisting = index < (currentWorkImages?.length || 0);
         return `
@@ -591,7 +593,7 @@ function closeImageViewer() {
 
 // == KEYBOARD EVENT LISTENERS ==
 function setupKeyboardEventListeners() {
-    document.addEventListener('keydown', function(e) {
+    document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
             if (!document.getElementById('workDetailsModal').classList.contains('hidden')) {
                 closeWorkDetailsModal();
@@ -618,7 +620,7 @@ function setupKeyboardEventListeners() {
 // == MODAL CLOSE HANDLERS ==
 function closeWorkDetailsModal(event) {
     if (event && event.target !== event.currentTarget) return;
-    
+
     const modal = document.getElementById('workDetailsModal');
     if (modal) {
         modal.classList.add('hidden');
@@ -627,7 +629,7 @@ function closeWorkDetailsModal(event) {
 
 function closeEditModal(event) {
     if (event && event.target !== event.currentTarget) return;
-    
+
     const modal = document.getElementById('editWorkModal');
     if (modal) {
         modal.classList.add('hidden');
@@ -639,7 +641,7 @@ function closeEditModal(event) {
 
 function closeAddCategoryModal(event) {
     if (event && event.target !== event.currentTarget) return;
-    
+
     const modal = document.getElementById('addCategoryModal');
     if (modal) {
         modal.classList.add('hidden');
@@ -650,7 +652,7 @@ function closeAddCategoryModal(event) {
 // == CONFIRMATION MODALS ==
 function showDeleteConfirmation(workId, workName) {
     deleteWorkId = workId;
-    document.getElementById('deleteConfirmText').textContent = 
+    document.getElementById('deleteConfirmText').textContent =
         `Are you sure you want to delete "${workName}"? This action cannot be undone.`;
     document.getElementById('deleteConfirmModal').classList.remove('hidden');
 }
@@ -683,14 +685,14 @@ function confirmLogout() {
 // == CATEGORIES MANAGEMENT ==
 async function refreshCategories() {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await sb
             .from('categories')
             .select('*')
             .order('name', { ascending: true });
-        
+
         if (error) throw error;
         categories = data || [];
-        
+
         populateCategoryDropdowns();
     } catch (error) {
         console.error('Error fetching categories:', error);
@@ -715,7 +717,7 @@ function populateCategoryDropdowns() {
             categoryOptions.appendChild(div);
         });
     }
-    
+
     const editCategoryDropdown = document.getElementById('editWorkCategory');
     if (editCategoryDropdown) {
         editCategoryDropdown.innerHTML = '';
@@ -726,7 +728,7 @@ function populateCategoryDropdowns() {
             editCategoryDropdown.appendChild(option);
         });
     }
-    
+
     const categoryFilterItems = document.getElementById('categoryFilterItems');
     if (categoryFilterItems) {
         categoryFilterItems.innerHTML = '';
@@ -748,11 +750,11 @@ function populateCategoryDropdowns() {
 function filterCategories(searchTerm) {
     const categoryOptions = document.getElementById('categoryOptions');
     if (!categoryOptions) return;
-    
-    const filteredCategories = categories.filter(category => 
+
+    const filteredCategories = categories.filter(category =>
         category.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
-    
+
     categoryOptions.innerHTML = '';
     filteredCategories.forEach(category => {
         const div = document.createElement('div');
@@ -795,22 +797,22 @@ function showAddCategoryModal() {
 function setupFormHandlers() {
     const workForm = document.getElementById('workForm');
     if (workForm) {
-        workForm.addEventListener('submit', async function(e) {
+        workForm.addEventListener('submit', async function (e) {
             e.preventDefault();
-            
+
             const assignedStaff = document.getElementById('assignStaff').value;
             const category = document.getElementById('workCategory').value;
-            
+
             if (!assignedStaff) {
                 showNotification('❌ Please select a staff member', 'error');
                 return;
             }
-            
+
             if (!category) {
                 showNotification('❌ Please select a category', 'error');
                 return;
             }
-            
+
             const workData = {
                 work_name: document.getElementById('workName').value,
                 category: category,
@@ -826,22 +828,22 @@ function setupFormHandlers() {
                 created_by: currentUser,
                 images: uploadedImages.map(img => img.url)
             };
-            
+
             try {
-                const { data, error } = await supabase
+                const { data, error } = await sb
                     .from('works')
                     .insert([workData])
                     .select();
-                
+
                 if (error) throw error;
-                
+
                 resetForm();
                 uploadedImages = [];
                 updateImagePreview();
                 await refreshWorks();
                 showTab('works');
                 showNotification('✅ Work added successfully!', 'success');
-                
+
                 if (assignedStaff !== currentUser) {
                     await createNotification(
                         assignedStaff,
@@ -853,114 +855,114 @@ function setupFormHandlers() {
                         sessionId
                     );
                 }
-                
+
             } catch (error) {
                 console.error('Error adding work:', error);
                 showNotification('❌ Failed to add work', 'error');
             }
         });
     }
-    
+
     const addCategoryForm = document.getElementById('addCategoryForm');
     if (addCategoryForm) {
-        addCategoryForm.addEventListener('submit', async function(e) {
+        addCategoryForm.addEventListener('submit', async function (e) {
             e.preventDefault();
-            
+
             const categoryName = document.getElementById('newCategoryName').value.trim();
-            
+
             if (!categoryName) {
                 showNotification('❌ Please enter a category name', 'error');
                 return;
             }
-            
-            const existingCategory = categories.find(cat => 
+
+            const existingCategory = categories.find(cat =>
                 cat.name.toLowerCase() === categoryName.toLowerCase()
             );
-            
+
             if (existingCategory) {
                 showNotification('❌ Category already exists', 'error');
                 return;
             }
-            
+
             try {
-                const { data, error } = await supabase
+                const { data, error } = await sb
                     .from('categories')
                     .insert([{
                         name: categoryName,
                         created_by: currentUser
                     }])
                     .select();
-                
+
                 if (error) throw error;
-                
+
                 await refreshCategories();
                 selectCategory(categoryName);
-                
+
                 document.getElementById('addCategoryModal').classList.add('hidden');
                 document.getElementById('addCategoryForm').reset();
                 showNotification('✅ Category added successfully!', 'success');
-                
+
             } catch (error) {
                 console.error('Error adding category:', error);
                 showNotification('❌ Failed to add category', 'error');
             }
         });
     }
-    
+
     const addQuickTaskForm = document.getElementById('addQuickTaskForm');
     if (addQuickTaskForm) {
-        addQuickTaskForm.addEventListener('submit', async function(e) {
+        addQuickTaskForm.addEventListener('submit', async function (e) {
             e.preventDefault();
-            
+
             const taskName = document.getElementById('quickTaskName').value.trim();
             const assignedStaff = document.getElementById('quickTaskStaff').value;
             const dueDate = document.getElementById('quickTaskDate').value;
-            
+
             if (!taskName) {
                 showNotification('❌ Please enter a task name', 'error');
                 return;
             }
-            
+
             if (!assignedStaff) {
                 showNotification('❌ Please select a staff member', 'error');
                 return;
             }
-            
+
             const taskData = {
                 task_name: taskName,
                 assigned_staff: assignedStaff,
                 due_date: dueDate || null,
                 created_by: currentUser
             };
-            
+
             try {
-                const { data, error } = await supabase
+                const { data, error } = await sb
                     .from('quick_tasks')
                     .insert([taskData])
                     .select();
-                
+
                 if (error) throw error;
-                
+
                 await refreshQuickTasks();
                 closeAddQuickTaskModal();
                 showNotification('✅ Quick task added successfully!', 'success');
-                
+
             } catch (error) {
                 console.error('Error adding quick task:', error);
                 showNotification('❌ Failed to add quick task', 'error');
             }
         });
     }
-    
+
     const editWorkForm = document.getElementById('editWorkForm');
     if (editWorkForm) {
-        editWorkForm.addEventListener('submit', async function(e) {
+        editWorkForm.addEventListener('submit', async function (e) {
             e.preventDefault();
-            
+
             if (!editingWorkId) return;
-            
+
             const allImages = [...(currentWorkImages || []), ...editUploadedImages.map(img => img.url)];
-            
+
             const updatedWork = {
                 work_name: document.getElementById('editWorkName').value,
                 category: document.getElementById('editWorkCategory').value,
@@ -976,22 +978,22 @@ function setupFormHandlers() {
 
             const mrpValue = parseFloat(document.getElementById('editWorkMrp').value);
             const quotationValue = parseFloat(document.getElementById('editWorkQuotationRate').value);
-            
+
             if (!isNaN(mrpValue)) {
                 updatedWork.mrp = mrpValue;
             }
             if (!isNaN(quotationValue)) {
                 updatedWork.quotation_rate = quotationValue;
             }
-            
+
             try {
-                const { error } = await supabase
+                const { error } = await sb
                     .from('works')
                     .update(updatedWork)
                     .eq('id', editingWorkId);
-                
+
                 if (error) throw error;
-                
+
                 const modal = document.getElementById('editWorkModal');
                 if (modal) {
                     modal.classList.add('hidden');
@@ -999,10 +1001,10 @@ function setupFormHandlers() {
                 editingWorkId = null;
                 editUploadedImages = [];
                 currentWorkImages = [];
-                
+
                 await refreshWorks();
                 showNotification('✅ Work updated successfully!', 'success');
-                
+
             } catch (error) {
                 console.error('Error updating work:', error);
                 showNotification('❌ Failed to update work', 'error');
@@ -1014,7 +1016,7 @@ function setupFormHandlers() {
 // == NOTIFICATION SYSTEM ==
 async function createNotification(recipientUser, senderUser, workId, type, title, message, senderSessionId) {
     try {
-        const { error } = await supabase
+        const { error } = await sb
             .from('notifications')
             .insert([{
                 recipient_user: recipientUser,
@@ -1025,9 +1027,9 @@ async function createNotification(recipientUser, senderUser, workId, type, title
                 message: message,
                 session_id: senderSessionId
             }]);
-        
+
         if (error) throw error;
-        
+
         console.log('✅ Notification created successfully');
     } catch (error) {
         console.error('Error creating notification:', error);
@@ -1036,8 +1038,8 @@ async function createNotification(recipientUser, senderUser, workId, type, title
 
 // == DROPDOWN MANAGEMENT ==
 function setupDropdownHandlers() {
-    document.addEventListener('click', function(event) {
-        if (!event.target.closest('.custom-dropdown') && 
+    document.addEventListener('click', function (event) {
+        if (!event.target.closest('.custom-dropdown') &&
             !event.target.closest('.status-dropdown') &&
             !event.target.closest('.profile-dropdown')) {
             closeAllDropdowns();
@@ -1056,7 +1058,7 @@ function closeAllDropdowns() {
         { element: 'categorySearchDropdown', icon: 'categoryIcon' },
         { element: 'quickTaskStaffDropdown', icon: 'quickTaskStaffIcon' }
     ];
-    
+
     dropdowns.forEach(({ element, icon }) => {
         const dropdown = document.getElementById(element);
         const iconEl = document.getElementById(icon);
@@ -1076,15 +1078,23 @@ function closeAllDropdowns() {
 function toggleDropdown(dropdownId, iconId) {
     const dropdown = document.getElementById(dropdownId);
     const icon = document.getElementById(iconId);
-    
+
     if (!dropdown || !icon) return;
-    
+
     const isHidden = dropdown.classList.contains('hidden');
     closeAllDropdowns();
-    
+
     if (isHidden) {
         dropdown.classList.remove('hidden');
         icon.style.transform = 'rotate(180deg)';
+    }
+}
+
+// Toggle filter container
+function toggleFilters() {
+    const container = document.getElementById('filterContainer');
+    if (container) {
+        container.classList.toggle('hidden');
     }
 }
 
@@ -1137,7 +1147,7 @@ function selectCreatorFilter(value) {
 function selectAssignStaff(value) {
     const assignStaffInput = document.getElementById('assignStaff');
     const assignStaffText = document.getElementById('assignStaffText');
-    
+
     if (assignStaffInput && assignStaffText) {
         assignStaffInput.value = value;
         assignStaffText.textContent = value;
@@ -1148,7 +1158,7 @@ function selectAssignStaff(value) {
 function selectPriority(value) {
     const priorityInput = document.getElementById('workPriority');
     const priorityText = document.getElementById('priorityText');
-    
+
     if (priorityInput && priorityText) {
         priorityInput.value = value;
         priorityText.textContent = value;
@@ -1175,16 +1185,16 @@ function clearAllFilters() {
         creator: 'all',
         category: 'all'
     };
-    
+
     currentSearchTerm = '';
     document.getElementById('workSearchInput').value = '';
-    
+
     document.getElementById('statusFilterText').textContent = 'All Status';
     document.getElementById('categoryFilterText').textContent = 'All Categories';
     document.getElementById('creatorFilterText').textContent = 'All Creators';
-    
+
     selectMemberTile('all');
-    
+
     closeAllDropdowns();
     renderWorks();
     updateMemberTiles();
@@ -1197,15 +1207,15 @@ function selectMemberTile(member) {
     document.querySelectorAll('.member-tile').forEach(tile => {
         tile.classList.remove('active');
     });
-    
+
     const tiles = document.querySelectorAll('.member-tile');
     tiles.forEach(tile => {
-        if ((member === 'all' && tile.textContent.includes('All')) || 
+        if ((member === 'all' && tile.textContent.includes('All')) ||
             (member !== 'all' && tile.textContent.includes(member))) {
             tile.classList.add('active');
         }
     });
-    
+
     currentFilters.member = member;
     renderWorks();
 }
@@ -1220,25 +1230,25 @@ function updateMemberTiles() {
     } else if (showUnpaidWorks) {
         worksToCount = works.filter(w => w.status === 'Unpaid');
     }
-    
+
     const counts = {
         all: worksToCount.length,
         Irshad: worksToCount.filter(w => w.assigned_staff === 'Irshad').length,
         Niyas: worksToCount.filter(w => w.assigned_staff === 'Niyas').length,
         Muhammed: worksToCount.filter(w => w.assigned_staff === 'Muhammed').length,
-        Najil: worksToCount.filter(w => w.assigned_staff === 'Najil').length,
+        Noora: worksToCount.filter(w => w.assigned_staff === 'Noora').length,
         Safvan: worksToCount.filter(w => w.assigned_staff === 'Safvan').length
     };
-    
+
     const countElements = [
         { id: 'allCount', count: counts.all },
         { id: 'irshadCount', count: counts.Irshad },
         { id: 'niyasCount', count: counts.Niyas },
         { id: 'muhammedCount', count: counts.Muhammed },
-        { id: 'najilCount', count: counts.Najil },
+        { id: 'nooraCount', count: counts.Noora },
         { id: 'safvanCount', count: counts.Safvan }
     ];
-    
+
     countElements.forEach(({ id, count }) => {
         const element = document.getElementById(id);
         if (element) {
@@ -1250,11 +1260,11 @@ function updateMemberTiles() {
 // == UPDATED: DASHBOARD NAVIGATION WITH UNPAID SUPPORT ==
 function goToWorksWithFilter(filterType) {
     showTab('works');
-    
+
     // Reset filter states
     showCompletedWorks = false;
     showUnpaidWorks = false;
-    
+
     if (filterType === 'Active') {
         // Show pending + in progress + proof works
         currentFilters.status = 'all';
@@ -1322,14 +1332,14 @@ function copyToClipboard(text, buttonElement) {
         copiedText.textContent = 'Copied!';
         copiedText.className = 'absolute -top-8 left-1/2 transform -translate-x-1/2 bg-green-600 text-white text-xs px-2 py-1 rounded shadow-lg z-50';
         buttonElement.appendChild(copiedText);
-        
+
         // Remove after 2 seconds
         setTimeout(() => {
             if (copiedText.parentNode) {
                 copiedText.remove();
             }
         }, 2000);
-        
+
         // Also show the toast notification
         showNotification('📋 WhatsApp number copied to clipboard!', 'success');
     }).catch(() => {
@@ -1342,16 +1352,16 @@ function copyToClipboard(text, buttonElement) {
 function loginUser(name, role) {
     currentUser = name;
     currentUserRole = role;
-    
+
     localStorage.setItem('currentUser', name);
     localStorage.setItem('currentUserRole', role);
-    
+
     document.getElementById('loginScreen').classList.add('hidden');
     document.getElementById('mainApp').classList.remove('hidden');
     document.getElementById('userName').textContent = name;
     document.getElementById('profileUserName').textContent = name;
     document.getElementById('userAvatar').src = memberAvatars[name];
-    
+
     Promise.all([
         refreshWorks(),
         refreshCategories(),
@@ -1361,12 +1371,12 @@ function loginUser(name, role) {
         subscribeToWorks();
         subscribeToNotifications();
         subscribeToQuickTasks();
-        
+
         renderWorks();
         updateStats();
         updateMemberTiles();
         showTab('dashboard');
-        
+
         showNotification(`👋 Welcome back, ${name}!`, 'success');
     });
 }
@@ -1374,7 +1384,7 @@ function loginUser(name, role) {
 function executeLogout() {
     localStorage.removeItem('currentUser');
     localStorage.removeItem('currentUserRole');
-    
+
     currentUser = null;
     currentUserRole = null;
     sessionId = null;
@@ -1386,12 +1396,12 @@ function executeLogout() {
     uploadedImages = [];
     editUploadedImages = [];
     currentWorkImages = [];
-    
+
     document.getElementById('mainApp').classList.add('hidden');
     document.getElementById('loginScreen').classList.remove('hidden');
-    
+
     resetForm();
-    
+
     showNotification('👋 Logged out successfully', 'info');
 }
 
@@ -1402,9 +1412,9 @@ function setupMemberFilters() {
 
 // == REAL-TIME SUBSCRIPTIONS ==
 function subscribeToWorks() {
-    supabase
+    sb
         .channel('works-changes')
-        .on('postgres_changes', 
+        .on('postgres_changes',
             { event: '*', schema: 'public', table: 'works' },
             async (payload) => {
                 console.log('🔄 Works table changed:', payload);
@@ -1417,13 +1427,13 @@ function subscribeToWorks() {
 }
 
 function subscribeToNotifications() {
-    supabase
+    sb
         .channel('notifications-changes')
         .on('postgres_changes',
             { event: 'INSERT', schema: 'public', table: 'notifications' },
             (payload) => {
                 const notification = payload.new;
-                if (notification.recipient_user === currentUser && 
+                if (notification.recipient_user === currentUser &&
                     notification.session_id !== sessionId) {
                     showBrowserNotification(notification.title, {
                         body: notification.message,
@@ -1437,9 +1447,9 @@ function subscribeToNotifications() {
 }
 
 function subscribeToQuickTasks() {
-    supabase
+    sb
         .channel('quick-tasks-changes')
-        .on('postgres_changes', 
+        .on('postgres_changes',
             { event: '*', schema: 'public', table: 'quick_tasks' },
             async (payload) => {
                 console.log('🔄 Quick tasks table changed:', payload);
@@ -1454,14 +1464,14 @@ function subscribeToQuickTasks() {
 // == WORKS MANAGEMENT ==
 async function refreshWorks() {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await sb
             .from('works')
             .select('*')
             .order('created_at', { ascending: false });
-        
+
         if (error) throw error;
         works = data || [];
-        
+
         renderWorks();
         updateStats();
         updateMemberTiles();
@@ -1475,18 +1485,23 @@ async function refreshWorks() {
 // == UPDATED: FILTER WORKS WITH UNPAID EXCLUSION ==
 function filterWorks() {
     let filteredWorks = [...works];
-    
+
     // Apply search filter first
     if (currentSearchTerm) {
         filteredWorks = filteredWorks.filter(work => {
+            const term = currentSearchTerm.replace(/\s+/g, '');
             const workName = (work.work_name || '').toLowerCase();
             const description = (work.description || '').toLowerCase();
-            
-            return workName.includes(currentSearchTerm) || 
-                   description.includes(currentSearchTerm);
+            const whatsappNumber = (work.whatsapp_number || '').replace(/\s+/g, '').toLowerCase();
+            const category = (work.category || '').toLowerCase();
+
+            return workName.includes(currentSearchTerm) ||
+                description.includes(currentSearchTerm) ||
+                whatsappNumber.includes(term) ||
+                category.includes(currentSearchTerm);
         });
     }
-    
+
     // UPDATED: Handle different view modes
     if (showUnpaidWorks) {
         // Show only unpaid works
@@ -1496,45 +1511,45 @@ function filterWorks() {
         filteredWorks = filteredWorks.filter(work => work.status === 'Completed');
     } else {
         // UPDATED: Exclude both completed and unpaid works from main view
-        filteredWorks = filteredWorks.filter(work => 
+        filteredWorks = filteredWorks.filter(work =>
             work.status !== 'Completed' && work.status !== 'Unpaid'
         );
     }
-    
+
     if (currentFilters.member !== 'all') {
-        filteredWorks = filteredWorks.filter(work => 
+        filteredWorks = filteredWorks.filter(work =>
             work.assigned_staff === currentFilters.member
         );
     }
-    
+
     if (currentFilters.status !== 'all') {
-        filteredWorks = filteredWorks.filter(work => 
+        filteredWorks = filteredWorks.filter(work =>
             work.status === currentFilters.status
         );
     }
-    
+
     if (currentFilters.category !== 'all') {
-        filteredWorks = filteredWorks.filter(work => 
+        filteredWorks = filteredWorks.filter(work =>
             work.category === currentFilters.category
         );
     }
-    
+
     if (currentFilters.creator !== 'all') {
-        filteredWorks = filteredWorks.filter(work => 
+        filteredWorks = filteredWorks.filter(work =>
             work.created_by === currentFilters.creator
         );
     }
-    
+
     if (currentFilters.deadline !== 'all') {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        
+
         filteredWorks = filteredWorks.filter(work => {
             if (!work.deadline) return currentFilters.deadline === 'all';
-            
+
             const workDeadline = new Date(work.deadline);
             workDeadline.setHours(0, 0, 0, 0);
-            
+
             switch (currentFilters.deadline) {
                 case 'today':
                     return workDeadline.getTime() === today.getTime();
@@ -1543,22 +1558,22 @@ function filterWorks() {
             }
         });
     }
-    
+
     // Default sorting by overdue and pending first
     filteredWorks.sort((a, b) => {
         const aOverdue = isOverdue(a);
         const bOverdue = isOverdue(b);
         if (aOverdue && !bOverdue) return -1;
         if (!aOverdue && bOverdue) return 1;
-        
+
         const aPending = a.status === 'Pending';
         const bPending = b.status === 'Pending';
         if (aPending && !bPending) return -1;
         if (!aPending && bPending) return 1;
-        
+
         return new Date(b.created_at) - new Date(a.created_at);
     });
-    
+
     return filteredWorks;
 }
 
@@ -1566,17 +1581,17 @@ function renderWorks() {
     const filteredWorks = filterWorks();
     const container = document.getElementById('worksCardsContainer');
     const noWorks = document.getElementById('noWorks');
-    
+
     if (!container) return;
-    
+
     if (filteredWorks.length === 0) {
         container.innerHTML = '';
         if (noWorks) noWorks.classList.remove('hidden');
         return;
     }
-    
+
     if (noWorks) noWorks.classList.add('hidden');
-    
+
     container.innerHTML = filteredWorks.map(work => createWorkCard(work)).join('');
 }
 
@@ -1585,13 +1600,13 @@ function createWorkCard(work) {
     const isOverdueWork = isOverdue(work);
     const deadlineText = formatDeadline(work);
     const avatar = memberAvatars[work.assigned_staff] || 'default-avatar.jpg';
-    
+
     const priorityColors = {
         'High': 'bg-red-100 text-red-800',
         'Medium': 'bg-yellow-100 text-yellow-800',
         'Low': 'bg-green-100 text-green-800'
     };
-    
+
     const statusColors = {
         'Pending': 'bg-orange-100 text-orange-800',
         'In Progress': 'bg-blue-100 text-blue-800',
@@ -1599,9 +1614,9 @@ function createWorkCard(work) {
         'Unpaid': 'bg-red-100 text-red-800',
         'Completed': 'bg-green-100 text-green-800'
     };
-    
+
     const isUpdating = statusUpdateInProgress.has(work.id);
-    
+
     const imageThumbnail = work.images && work.images.length > 0 ? `
         <div class="mt-3 mb-2">
             <div class="flex gap-2 overflow-x-auto">
@@ -1612,7 +1627,7 @@ function createWorkCard(work) {
             </div>
         </div>
     ` : '';
-    
+
     return `
         <div class="work-card p-6 animate-fade-in ${isOverdueWork ? 'ring-2 ring-red-200 bg-red-50' : ''}" onclick="showWorkDetails(${work.id})">
             <div class="flex justify-between items-start mb-4">
@@ -1692,7 +1707,7 @@ function showStatusDropdown(workId, currentStatus, buttonElement) {
     document.querySelectorAll('.status-dropdown-menu').forEach(dropdown => {
         dropdown.remove();
     });
-    
+
     const statusOptions = [
         { value: 'Pending', color: 'bg-orange-100 text-orange-800', icon: '⏳' },
         { value: 'In Progress', color: 'bg-blue-100 text-blue-800', icon: '🔄' },
@@ -1700,10 +1715,10 @@ function showStatusDropdown(workId, currentStatus, buttonElement) {
         { value: 'Unpaid', color: 'bg-red-100 text-red-800', icon: '💸' },
         { value: 'Completed', color: 'bg-green-100 text-green-800', icon: '✅' }
     ];
-    
+
     const dropdown = document.createElement('div');
     dropdown.className = 'status-dropdown-menu animate-slide-down';
-    
+
     dropdown.innerHTML = statusOptions.map(option => `
         <button onclick="changeWorkStatusOnly(${workId}, '${option.value}'); this.closest('.status-dropdown-menu').remove();" 
                 class="w-full text-left hover:bg-gray-50 transition-colors ${option.value === currentStatus ? 'bg-gray-100 font-medium' : ''}">
@@ -1711,10 +1726,10 @@ function showStatusDropdown(workId, currentStatus, buttonElement) {
             <span class="px-2 py-1 rounded-full text-xs ${option.color}">${option.value}</span>
         </button>
     `).join('');
-    
+
     const container = buttonElement.closest('.status-dropdown');
     container.appendChild(dropdown);
-    
+
     setTimeout(() => {
         const closeHandler = (e) => {
             if (!dropdown.contains(e.target) && e.target !== buttonElement) {
@@ -1729,30 +1744,30 @@ function showStatusDropdown(workId, currentStatus, buttonElement) {
 // == STATUS CHANGE FUNCTION ==
 async function changeWorkStatusOnly(workId, newStatus) {
     if (statusUpdateInProgress.has(workId)) return;
-    
+
     statusUpdateInProgress.add(workId);
-    
+
     try {
-        const { error } = await supabase
+        const { error } = await sb
             .from('works')
             .update({ status: newStatus })
             .eq('id', workId);
-        
+
         if (error) throw error;
-        
+
         const workIndex = works.findIndex(w => w.id === workId);
         if (workIndex !== -1) {
             works[workIndex].status = newStatus;
             works[workIndex].updated_at = new Date().toISOString();
         }
-        
+
         renderWorks();
         updateStats();
         updateMemberTiles();
         updateRecentActivity();
-        
+
         showNotification(`✅ Status updated to ${newStatus}`, 'success');
-        
+
         const work = works.find(w => w.id === workId);
         if (work) {
             showBrowserNotification('🔄 Status Updated', {
@@ -1760,11 +1775,11 @@ async function changeWorkStatusOnly(workId, newStatus) {
                 tag: 'status-change'
             });
         }
-        
+
         setTimeout(async () => {
             await refreshWorks();
         }, 1000);
-        
+
     } catch (error) {
         console.error('Error updating work status:', error);
         showNotification('❌ Failed to update status', 'error');
@@ -1777,17 +1792,17 @@ async function changeWorkStatusOnly(workId, newStatus) {
 function showWorkDetails(workId) {
     const work = works.find(w => w.id === workId);
     if (!work) return;
-    
+
     currentWorkId = workId;
     const avatar = memberAvatars[work.assigned_staff] || 'default-avatar.jpg';
     const creatorAvatar = memberAvatars[work.created_by] || 'default-avatar.jpg';
-    
+
     const priorityColors = {
         'High': 'bg-red-100 text-red-800',
-        'Medium': 'bg-yellow-100 text-yellow-800',  
+        'Medium': 'bg-yellow-100 text-yellow-800',
         'Low': 'bg-green-100 text-green-800'
     };
-    
+
     const statusColors = {
         'Pending': 'bg-orange-100 text-orange-800',
         'In Progress': 'bg-blue-100 text-blue-800',
@@ -1795,10 +1810,10 @@ function showWorkDetails(workId) {
         'Unpaid': 'bg-red-100 text-red-800',
         'Completed': 'bg-green-100 text-green-800'
     };
-    
+
     const isOverdueWork = isOverdue(work);
     const deadlineText = formatDeadline(work);
-    
+
     const imagesSection = work.images && work.images.length > 0 ? `
         <div>
             <h4 class="font-semibold text-gray-800 mb-2">Images (${work.images.length})</h4>
@@ -1811,7 +1826,7 @@ function showWorkDetails(workId) {
             </div>
         </div>
     ` : '';
-    
+
     const content = `
         <div class="space-y-6">
             <div class="border-b border-gray-200 pb-4">
@@ -1906,7 +1921,7 @@ function showWorkDetails(workId) {
             </div>
         </div>
     `;
-    
+
     document.getElementById('workDetailsContent').innerHTML = content;
     document.getElementById('workDetailsModal').classList.remove('hidden');
 }
@@ -1914,11 +1929,11 @@ function showWorkDetails(workId) {
 function editWork(workId) {
     const work = works.find(w => w.id === workId);
     if (!work) return;
-    
+
     editingWorkId = workId;
     currentWorkImages = work.images ? [...work.images] : [];
     editUploadedImages = [];
-    
+
     document.getElementById('editWorkName').value = work.work_name || '';
     document.getElementById('editWorkCategory').value = work.category || '';
     document.getElementById('editWhatsappNumber').value = work.whatsapp_number || '';
@@ -1930,23 +1945,23 @@ function editWork(workId) {
     document.getElementById('editWorkDeadline').value = work.deadline || '';
     document.getElementById('editWorkDeadlineTime').value = work.deadline_time || '';
     document.getElementById('editWorkPriority').value = work.priority || 'Medium';
-    
+
     updateEditImagePreview();
     document.getElementById('editWorkModal').classList.remove('hidden');
 }
 
 async function executeDeleteWork(workId) {
     try {
-        const { error } = await supabase
+        const { error } = await sb
             .from('works')
             .delete()
             .eq('id', workId);
-        
+
         if (error) throw error;
-        
+
         await refreshWorks();
         showNotification('✅ Work deleted successfully!', 'success');
-        
+
     } catch (error) {
         console.error('Error deleting work:', error);
         showNotification('❌ Failed to delete work', 'error');
@@ -1956,10 +1971,10 @@ async function executeDeleteWork(workId) {
 // == UTILITY FUNCTIONS ==
 function isOverdue(work) {
     if (!work.deadline || work.status === 'Completed') return false;
-    
+
     const today = new Date();
     const deadline = new Date(work.deadline);
-    
+
     if (work.deadline_time) {
         const [hours, minutes] = work.deadline_time.split(':');
         deadline.setHours(parseInt(hours), parseInt(minutes), 0, 0);
@@ -1972,32 +1987,32 @@ function isOverdue(work) {
 
 function formatDeadline(work) {
     if (!work.deadline) return 'No deadline';
-    
+
     const deadline = new Date(work.deadline);
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    
+
     const deadlineDate = new Date(deadline);
     deadlineDate.setHours(0, 0, 0, 0);
     const todayDate = new Date(today);
     todayDate.setHours(0, 0, 0, 0);
     const tomorrowDate = new Date(tomorrow);
     tomorrowDate.setHours(0, 0, 0, 0);
-    
+
     let dateText;
     if (deadlineDate.getTime() === todayDate.getTime()) {
         dateText = 'Today';
     } else if (deadlineDate.getTime() === tomorrowDate.getTime()) {
         dateText = 'Tomorrow';
     } else {
-        dateText = deadline.toLocaleDateString('en-US', { 
-            month: 'short', 
+        dateText = deadline.toLocaleDateString('en-US', {
+            month: 'short',
             day: 'numeric',
             year: deadline.getFullYear() !== today.getFullYear() ? 'numeric' : undefined
         });
     }
-    
+
     if (work.deadline_time) {
         const time = new Date(`2000-01-01T${work.deadline_time}`).toLocaleTimeString('en-US', {
             hour: 'numeric',
@@ -2006,7 +2021,7 @@ function formatDeadline(work) {
         });
         return `${dateText} at ${time}`;
     }
-    
+
     return dateText;
 }
 
@@ -2014,14 +2029,14 @@ function formatRelativeTime(dateString) {
     const date = new Date(dateString);
     const now = new Date();
     const diffInSeconds = Math.floor((now - date) / 1000);
-    
+
     if (diffInSeconds < 60) return 'Just now';
     if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
     if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
     if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)}d ago`;
-    
-    return date.toLocaleDateString('en-US', { 
-        month: 'short', 
+
+    return date.toLocaleDateString('en-US', {
+        month: 'short',
         day: 'numeric',
         year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
     });
@@ -2036,10 +2051,10 @@ function updateDateTime() {
     });
     const dateString = now.toLocaleDateString('en-US', {
         weekday: 'short',
-        month: 'short', 
+        month: 'short',
         day: 'numeric'
     });
-    
+
     const element = document.getElementById('currentDateTime');
     if (element) {
         element.textContent = `${dateString} • ${timeString}`;
@@ -2053,14 +2068,14 @@ function updateStats() {
     const unpaidWorksElement = document.getElementById('unpaidWorks');
     const completedWorksElement = document.getElementById('completedWorks');
     const dueTodayWorksElement = document.getElementById('dueTodayWorks');
-    
+
     if (totalWorksElement) totalWorksElement.textContent = works.length;
-    if (activeWorksElement) activeWorksElement.textContent = works.filter(w => 
+    if (activeWorksElement) activeWorksElement.textContent = works.filter(w =>
         w.status === 'Pending' || w.status === 'In Progress' || w.status === 'Proof'
     ).length;
     if (unpaidWorksElement) unpaidWorksElement.textContent = works.filter(w => w.status === 'Unpaid').length;
     if (completedWorksElement) completedWorksElement.textContent = works.filter(w => w.status === 'Completed').length;
-    
+
     if (dueTodayWorksElement) {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -2077,7 +2092,7 @@ function updateStats() {
 function updateRecentActivity() {
     const recentActivityElement = document.getElementById('recentActivity');
     if (!recentActivityElement) return;
-    
+
     const recentWorks = works
         .sort((a, b) => {
             const aDate = new Date(a.updated_at || a.created_at);
@@ -2085,12 +2100,12 @@ function updateRecentActivity() {
             return bDate - aDate;
         })
         .slice(0, 5);
-    
+
     if (recentWorks.length === 0) {
         recentActivityElement.innerHTML = '<p class="text-gray-500 text-center py-8">No recent activity</p>';
         return;
     }
-    
+
     recentActivityElement.innerHTML = recentWorks.map(work => {
         const avatar = memberAvatars[work.assigned_staff] || 'default-avatar.jpg';
         const statusColors = {
@@ -2100,11 +2115,11 @@ function updateRecentActivity() {
             'Unpaid': 'bg-red-100 text-red-800',
             'Completed': 'bg-green-100 text-green-800'
         };
-        
+
         const activityDate = work.updated_at || work.created_at;
         const isStatusUpdate = work.updated_at && work.updated_at !== work.created_at;
         const activityText = isStatusUpdate ? 'Status updated' : 'Work created';
-        
+
         return `
             <div class="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer" onclick="showWorkDetails(${work.id})">
                 <img src="${avatar}" alt="${work.assigned_staff}" class="w-8 h-8 rounded-full object-cover">
@@ -2126,15 +2141,15 @@ function resetForm() {
     if (form) {
         form.reset();
     }
-    
+
     document.getElementById('categoryText').textContent = 'Select Category';
     document.getElementById('assignStaffText').textContent = 'Select Staff Member';
     document.getElementById('priorityText').textContent = 'Medium';
-    
+
     document.getElementById('workCategory').value = '';
     document.getElementById('assignStaff').value = '';
     document.getElementById('workPriority').value = 'Medium';
-    
+
     const categorySearch = document.getElementById('categorySearch');
     if (categorySearch) {
         categorySearch.value = '';
@@ -2150,32 +2165,32 @@ function showTab(tabName) {
             searchInput.value = '';
         }
     }
-    
+
     if (tabName !== 'dashboard') {
         showCompletedWorks = false;
         showUnpaidWorks = false;
     }
-    
+
     document.querySelectorAll('.nav-tab').forEach(tab => {
         tab.classList.remove('bg-primary', 'text-white');
         tab.classList.add('text-gray-600', 'hover:text-gray-800', 'hover:bg-gray-100');
     });
-    
+
     const activeTab = document.getElementById(tabName + 'Tab');
     if (activeTab) {
         activeTab.classList.add('bg-primary', 'text-white');
         activeTab.classList.remove('text-gray-600', 'hover:text-gray-800', 'hover:bg-gray-100');
     }
-    
+
     document.querySelectorAll('.tab-content').forEach(content => {
         content.classList.add('hidden');
     });
-    
+
     const activeContent = document.getElementById(tabName + 'Content');
     if (activeContent) {
         activeContent.classList.remove('hidden');
     }
-    
+
     if (tabName === 'works') {
         renderWorks();
         updateMemberTiles();
@@ -2187,8 +2202,28 @@ function showTab(tabName) {
     }
 }
 
+// == MY WORKS NAVIGATION ==
+function showMyWorks() {
+    if (currentUser) {
+        currentFilters.member = currentUser;
+
+        // Update member tiles visual state
+        document.querySelectorAll('.member-tile').forEach(tile => {
+            tile.classList.remove('active');
+            if (tile.textContent.includes(currentUser)) {
+                tile.classList.add('active');
+            }
+        });
+
+        showTab('works');
+    } else {
+        showTab('works');
+    }
+}
+
 // == EXPOSE FUNCTIONS TO GLOBAL SCOPE ==
 window.loginUser = loginUser;
+window.showMyWorks = showMyWorks;
 window.showTab = showTab;
 window.showWorkDetails = showWorkDetails;
 window.editWork = editWork;
@@ -2215,6 +2250,7 @@ window.selectPriority = selectPriority;
 window.cancelAddWork = cancelAddWork;
 window.clearAllFilters = clearAllFilters;
 window.selectMemberTile = selectMemberTile;
+window.toggleFilters = toggleFilters;
 window.goToWorksWithFilter = goToWorksWithFilter;
 window.selectStatusFilter = selectStatusFilter;
 window.selectCategoryFilter = selectCategoryFilter;
@@ -2244,3 +2280,4 @@ window.handleEditImageUpload = handleEditImageUpload;
 window.removeImage = removeImage;
 window.viewImage = viewImage;
 window.closeImageViewer = closeImageViewer;
+
