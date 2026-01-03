@@ -1,3 +1,9 @@
+/* Global Scrollbar Fix for Layout Stability */
+html {
+    overflow-y: scroll;
+    /* Force vertical scrollbar to prevent layout shift */
+}
+
 /* Custom Scrollbar Styles */
 ::-webkit-scrollbar {
     width: 6px;
