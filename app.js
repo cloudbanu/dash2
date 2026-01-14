@@ -20,6 +20,11 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let currentUser = null;
 let currentUserRole = null;
 let sessionId = null;
+let totalWorksCount = 0;
+let activeWorksCount = 0;
+let unpaidWorksCount = 0;
+let completedWorksCount = 0;
+let dueTodayWorksCount = 0;
 let works = [];
 let categories = [];
 let quickTasks = [];
@@ -1694,13 +1699,53 @@ function subscribeToQuickTasks() {
 // == WORKS MANAGEMENT ==
 async function refreshWorks() {
     try {
-        const { data, error } = await sb
-            .from('works')
-            .select('*')
-            .order('created_at', { ascending: false });
+        const todayStr = new Date().toISOString().split('T')[0];
 
-        if (error) throw error;
-        works = data || [];
+        const [
+            worksResponse,
+            activeResponse,
+            unpaidResponse,
+            completedResponse,
+            dueTodayResponse
+        ] = await Promise.all([
+            // 1. Fetch Works List
+            sb.from('works')
+                .select('*', { count: 'exact' })
+                .order('created_at', { ascending: false })
+                .limit(5000),
+
+            // 2. Count Active
+            sb.from('works')
+                .select('*', { count: 'exact', head: true })
+                .in('status', ['Pending', 'In Progress', 'Proof']),
+
+            // 3. Count Unpaid
+            sb.from('works')
+                .select('*', { count: 'exact', head: true })
+                .eq('status', 'Unpaid'),
+
+            // 4. Count Completed
+            sb.from('works')
+                .select('*', { count: 'exact', head: true })
+                .eq('status', 'Completed'),
+
+            // 5. Count Due Today (Active only)
+            sb.from('works')
+                .select('*', { count: 'exact', head: true })
+                .eq('deadline', todayStr)
+                .neq('status', 'Completed')
+        ]);
+
+        if (worksResponse.error) throw worksResponse.error;
+
+        works = worksResponse.data || [];
+        totalWorksCount = worksResponse.count || works.length;
+
+        // Update Stats Globals
+        activeWorksCount = activeResponse.count || 0;
+        unpaidWorksCount = unpaidResponse.count || 0;
+        completedWorksCount = completedResponse.count || 0;
+        dueTodayWorksCount = dueTodayResponse.count || 0;
 
         renderWorks();
         updateStats();
@@ -2411,24 +2456,11 @@ function updateStats() {
     const completedWorksElement = document.getElementById('completedWorks');
     const dueTodayWorksElement = document.getElementById('dueTodayWorks');
 
-    if (totalWorksElement) totalWorksElement.textContent = works.length;
-    if (activeWorksElement) activeWorksElement.textContent = works.filter(w =>
-        w.status === 'Pending' || w.status === 'In Progress' || w.status === 'Proof'
-    ).length;
-    if (unpaidWorksElement) unpaidWorksElement.textContent = works.filter(w => w.status === 'Unpaid').length;
-    if (completedWorksElement) completedWorksElement.textContent = works.filter(w => w.status === 'Completed').length;
-
-    if (dueTodayWorksElement) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const dueTodayCount = works.filter(work => {
-            if (!work.deadline || work.status === 'Completed') return false;
-            const workDeadline = new Date(work.deadline);
-            workDeadline.setHours(0, 0, 0, 0);
-            return workDeadline.getTime() === today.getTime();
-        }).length;
-        dueTodayWorksElement.textContent = dueTodayCount;
-    }
+    if (totalWorksElement) totalWorksElement.textContent = totalWorksCount;
+    if (activeWorksElement) activeWorksElement.textContent = activeWorksCount;
+    if (unpaidWorksElement) unpaidWorksElement.textContent = unpaidWorksCount;
+    if (completedWorksElement) completedWorksElement.textContent = completedWorksCount;
+    if (dueTodayWorksElement) dueTodayWorksElement.textContent = dueTodayWorksCount;
 }
 
 function updateRecentActivity() {
