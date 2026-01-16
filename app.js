@@ -51,7 +51,7 @@ let editUploadedImages = [];
 let currentWorkImages = [];
 
 // == UPDATED: NOTIFICATION SYSTEM ==
-function showNotification(message, type = 'info', duration = 4000) {
+function showNotification(message, type = 'info', duration = 3000) {
     const container = document.getElementById('notificationContainer');
     if (!container) return;
 
@@ -59,45 +59,51 @@ function showNotification(message, type = 'info', duration = 4000) {
     const notification = document.createElement('div');
     notification.className = `notification-toast ${type}`;
 
-    // Determine icon based on type
+    // Determine icon based on type (Simplified icons for pill style)
     let icon = '';
     switch (type) {
         case 'success':
-            icon = '<svg class="notification-icon success" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+            icon = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>';
             break;
         case 'error':
-            icon = '<svg class="notification-icon error" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+            icon = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path></svg>';
             break;
         case 'warning':
-            icon = '<svg class="notification-icon warning" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path></svg>';
+            icon = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path></svg>';
             break;
         default: // info
-            icon = '<svg class="notification-icon info" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+            icon = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
     }
 
     notification.innerHTML = `
-        ${icon}
+        <div class="notification-icon-wrapper">
+            ${icon}
+        </div>
         <div class="notification-message">${message}</div>
+        <div class="notification-progress" style="animation-duration: ${duration}ms"></div>
     `;
 
-    // Add click to dismiss
+    // Add click to dismiss (Immediate fade)
     notification.onclick = () => {
+        notification.style.transition = 'opacity 0.2s ease';
         notification.style.opacity = '0';
-        notification.style.transform = 'translateX(100%)';
-        setTimeout(() => notification.remove(), 300);
+        setTimeout(() => notification.remove(), 200);
     };
 
     // Add to container
     container.appendChild(notification);
 
-    // Auto remove after duration
+    // Auto remove: Start fading when 25% time remains
+    const fadeStart = duration * 0.75;
+    const fadeDuration = duration * 0.25;
+
     setTimeout(() => {
         if (notification.parentNode) {
+            notification.style.transition = `opacity ${fadeDuration}ms ease-out`;
             notification.style.opacity = '0';
-            notification.style.transform = 'translateX(100%)';
-            setTimeout(() => notification.remove(), 300);
+            setTimeout(() => notification.remove(), fadeDuration);
         }
-    }, duration);
+    }, fadeStart);
 }
 
 // == INITIALIZATION ==
@@ -147,6 +153,9 @@ document.addEventListener('DOMContentLoaded', async function () {
     setupDropdownHandlers();
     setupFormHandlers();
     setupStaffSelection();
+
+    // Disable right-click context menu
+    document.addEventListener('contextmenu', event => event.preventDefault());
 });
 
 // == SESSION MANAGEMENT ==
@@ -168,7 +177,7 @@ async function refreshQuickTasks() {
         renderQuickTasks();
     } catch (error) {
         console.error('Error fetching quick tasks:', error);
-        showNotification('❌ Failed to refresh quick tasks', 'error');
+        showNotification('Failed to refresh quick tasks', 'error');
     }
 }
 
@@ -268,10 +277,10 @@ async function toggleQuickTask(taskId) {
         task.completed = !task.completed;
         renderQuickTasks();
 
-        showNotification(task.completed ? '✅ Task completed!' : '🔄 Task marked as pending', 'success');
+        showNotification(task.completed ? 'Task completed!' : 'Task marked as pending', 'success');
     } catch (error) {
         console.error('Error updating task:', error);
-        showNotification('❌ Failed to update task', 'error');
+        showNotification('Failed to update task', 'error');
     }
 }
 
@@ -289,10 +298,10 @@ async function deleteQuickTask(taskId) {
         quickTasks = quickTasks.filter(t => t.id !== taskId);
         renderQuickTasks();
 
-        showNotification('🗑️ Task deleted successfully', 'success');
+        showNotification('Task deleted successfully', 'success');
     } catch (error) {
         console.error('Error deleting task:', error);
-        showNotification('❌ Failed to delete task', 'error');
+        showNotification('Failed to delete task', 'error');
     }
 }
 
@@ -441,7 +450,7 @@ async function processImages(files, isEdit = false) {
 
     for (const file of files) {
         if (file.size > 10 * 1024 * 1024) {
-            showNotification('❌ File too large. Maximum size is 10MB', 'error');
+            showNotification('File too large. Maximum size is 10MB', 'error');
             continue;
         }
 
@@ -475,7 +484,7 @@ async function processImages(files, isEdit = false) {
 
         } catch (error) {
             console.error('Error uploading image:', error);
-            showNotification('❌ Failed to upload image: ' + file.name, 'error');
+            showNotification('Failed to upload image: ' + file.name, 'error');
         }
 
         processedFiles++;
@@ -490,7 +499,7 @@ async function processImages(files, isEdit = false) {
         }, 1000);
     }
 
-    showNotification(`✅ ${processedFiles} image(s) uploaded successfully`, 'success');
+    showNotification(`${processedFiles} image(s) uploaded successfully`, 'success');
 }
 
 function compressImage(file, quality) {
@@ -727,7 +736,7 @@ async function refreshCategories() {
         populateCategoryDropdowns();
     } catch (error) {
         console.error('Error fetching categories:', error);
-        showNotification('❌ Failed to refresh categories', 'error');
+        showNotification('Failed to refresh categories', 'error');
     }
 }
 
@@ -1035,6 +1044,9 @@ function setupFormHandlers() {
         workForm.addEventListener('submit', async function (e) {
             e.preventDefault();
 
+            const submitBtn = workForm.querySelector('button[type="submit"]');
+            const originalBtnText = submitBtn.innerHTML;
+
             const assignedStaff = document.getElementById('assignStaff').value;
             const category = document.getElementById('workCategory').value;
 
@@ -1047,6 +1059,17 @@ function setupFormHandlers() {
                 showNotification('❌ Please select a category', 'error');
                 return;
             }
+
+            // Disable button and show loading state
+            submitBtn.disabled = true;
+            submitBtn.classList.add('opacity-70', 'cursor-not-allowed');
+            submitBtn.innerHTML = `
+                <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Adding...
+            `;
 
             const workData = {
                 work_name: document.getElementById('workName').value,
@@ -1094,6 +1117,11 @@ function setupFormHandlers() {
             } catch (error) {
                 console.error('Error adding work:', error);
                 showNotification('❌ Failed to add work', 'error');
+            } finally {
+                // Restore button state
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('opacity-70', 'cursor-not-allowed');
+                submitBtn.innerHTML = originalBtnText;
             }
         });
     }
@@ -1180,11 +1208,11 @@ function setupFormHandlers() {
 
                 await refreshQuickTasks();
                 closeAddQuickTaskModal();
-                showNotification('✅ Quick task added successfully!', 'success');
+                showNotification('Quick task added successfully!', 'success');
 
             } catch (error) {
                 console.error('Error adding quick task:', error);
-                showNotification('❌ Failed to add quick task', 'error');
+                showNotification('Failed to add quick task', 'error');
             }
         });
     }
@@ -1238,11 +1266,11 @@ function setupFormHandlers() {
                 currentWorkImages = [];
 
                 await refreshWorks();
-                showNotification('✅ Work updated successfully!', 'success');
+                showNotification('Work updated successfully!', 'success');
 
             } catch (error) {
                 console.error('Error updating work:', error);
-                showNotification('❌ Failed to update work', 'error');
+                showNotification('Failed to update work', 'error');
             }
         });
     }
@@ -1434,7 +1462,7 @@ function clearAllFilters() {
     renderWorks();
     updateMemberTiles();
     updateStats();
-    showNotification('🔄 All filters cleared', 'info');
+    showNotification('All filters cleared', 'info');
 }
 
 // == MEMBER TILES ==
@@ -1549,13 +1577,13 @@ function toggleNotifications() {
     if (!notificationsEnabled) {
         requestNotificationPermission().then(() => {
             if (notificationsEnabled) {
-                showNotification('✅ Browser notifications enabled successfully!', 'success');
+                showNotification('Browser notifications enabled successfully!', 'success');
             } else {
-                showNotification('❌ Notification permission denied', 'error');
+                showNotification('Notification permission denied', 'error');
             }
         });
     } else {
-        showNotification('🔔 Notifications are already enabled!', 'info');
+        showNotification('Notifications are already enabled!', 'info');
     }
 }
 
@@ -1576,9 +1604,9 @@ function copyToClipboard(text, buttonElement) {
         }, 2000);
 
         // Also show the toast notification
-        showNotification('📋 WhatsApp number copied to clipboard!', 'success');
+        showNotification('WhatsApp number copied to clipboard!', 'success');
     }).catch(() => {
-        showNotification('❌ Failed to copy to clipboard', 'error');
+        showNotification('Failed to copy to clipboard', 'error');
     });
 }
 
@@ -1612,7 +1640,7 @@ function loginUser(name, role) {
         updateMemberTiles();
         showTab('dashboard');
 
-        showNotification(`👋 Welcome back, ${name}!`, 'success');
+        showNotification(`Welcome back, ${name}!`, 'success');
     });
 }
 
@@ -1637,7 +1665,7 @@ function executeLogout() {
 
     resetForm();
 
-    showNotification('👋 Logged out successfully', 'info');
+    showNotification('Logged out successfully', 'info');
 }
 
 // == SETUP MEMBER FILTERS ==
@@ -1652,7 +1680,7 @@ function subscribeToWorks() {
         .on('postgres_changes',
             { event: '*', schema: 'public', table: 'works' },
             async (payload) => {
-                console.log('🔄 Works table changed:', payload);
+                console.log('Works table changed:', payload);
                 setTimeout(async () => {
                     await refreshWorks();
                 }, 500);
@@ -1753,7 +1781,7 @@ async function refreshWorks() {
         updateRecentActivity();
     } catch (error) {
         console.error('Error fetching works:', error);
-        showNotification('❌ Failed to refresh works', 'error');
+        showNotification('Failed to refresh works', 'error');
     }
 }
 
@@ -1853,11 +1881,21 @@ function filterWorks() {
 }
 
 function renderWorks() {
-    const filteredWorks = filterWorks();
     const container = document.getElementById('worksCardsContainer');
     const noWorks = document.getElementById('noWorks');
 
     if (!container) return;
+
+    // == FLIP ANIMATION: FIRST (Capture Positions) ==
+    const oldPositions = new Map();
+    container.querySelectorAll('.work-card').forEach(card => {
+        const id = card.getAttribute('data-work-id');
+        if (id) {
+            oldPositions.set(id, card.getBoundingClientRect());
+        }
+    });
+
+    const filteredWorks = filterWorks();
 
     if (filteredWorks.length === 0) {
         container.innerHTML = '';
@@ -1867,7 +1905,58 @@ function renderWorks() {
 
     if (noWorks) noWorks.classList.add('hidden');
 
+    // == UPDATE DOM ==
     container.innerHTML = filteredWorks.map(work => createWorkCard(work)).join('');
+
+    // == FLIP ANIMATION: LAST, INVERT, PLAY ==
+    container.querySelectorAll('.work-card').forEach(newCard => {
+        const id = newCard.getAttribute('data-work-id');
+        const oldPos = oldPositions.get(id);
+
+        if (oldPos) {
+            const newPos = newCard.getBoundingClientRect();
+            const deltaX = oldPos.left - newPos.left;
+            const deltaY = oldPos.top - newPos.top;
+
+            // Only animate if the element actually moved
+            if (Math.abs(deltaX) > 0.5 || Math.abs(deltaY) > 0.5) {
+                // INVERT: Move it back to where it was
+                newCard.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+                newCard.style.transition = 'none';
+                newCard.style.zIndex = '10'; // Ensure it slides over others
+
+                // PLAY: Animate to new position
+                requestAnimationFrame(() => {
+                    // Force reflow
+                    newCard.offsetHeight;
+
+                    // Disable hover effects during animation to prevent conflict/stutter
+                    newCard.style.pointerEvents = 'none';
+
+                    newCard.style.transition = 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+                    newCard.style.transform = '';
+
+                    // Cleanup z-index and re-enable pointer events
+                    setTimeout(() => {
+                        newCard.style.zIndex = '';
+                        newCard.style.pointerEvents = '';
+                    }, 500);
+                });
+            }
+        } else if (oldPositions.size > 0) {
+            // Entry animation for new cards (if list wasn't empty)
+            newCard.style.opacity = '0';
+            newCard.style.transform = 'translateY(10px)'; // Minimal slide up
+            newCard.style.transition = 'none';
+
+            requestAnimationFrame(() => {
+                newCard.offsetHeight; // Reflow
+                newCard.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'; // Faster, smoother
+                newCard.style.opacity = '1';
+                newCard.style.transform = 'translateY(0)';
+            });
+        }
+    });
 }
 
 // == UPDATED: WORK CARD SCRIPT ==
@@ -1908,7 +1997,7 @@ function createWorkCard(work) {
     ` : '';
 
     return `
-        <div class="work-card group p-5 bg-white rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] transition-all duration-300 border border-gray-100 min-w-0 flex flex-col h-full ${isOverdueWork ? 'bg-red-50/50 border-red-100' : ''}" onclick="showWorkDetails(${work.id})">
+        <div data-work-id="${work.id}" class="work-card group p-5 bg-white rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] transition-all duration-300 border border-gray-100 min-w-0 flex flex-col h-full ${isOverdueWork ? 'bg-red-50/50 border-red-100' : ''}" onclick="showWorkDetails(${work.id})">
             
             <div class="flex justify-between items-start mb-2">
                 <span class="text-xs font-semibold tracking-wide uppercase text-gray-500 bg-gray-50 px-2 py-0.5 rounded-md truncate max-w-[60%]">${work.category || 'No Category'}</span>
@@ -2081,11 +2170,11 @@ function showStatusDropdown(workId, currentStatus, buttonElement) {
         });
 
         const statusOptions = [
-            { value: 'Pending', color: 'bg-orange-100 text-orange-800', icon: '⏳' },
-            { value: 'In Progress', color: 'bg-blue-100 text-blue-800', icon: '🔄' },
-            { value: 'Proof', color: 'bg-purple-100 text-purple-800', icon: '🎯' },
-            { value: 'Unpaid', color: 'bg-red-100 text-red-800', icon: '💸' },
-            { value: 'Completed', color: 'bg-green-100 text-green-800', icon: '✅' }
+            { value: 'Pending', color: 'bg-orange-100 text-orange-800', icon: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>' },
+            { value: 'In Progress', color: 'bg-blue-100 text-blue-800', icon: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>' },
+            { value: 'Proof', color: 'bg-purple-100 text-purple-800', icon: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>' },
+            { value: 'Unpaid', color: 'bg-red-100 text-red-800', icon: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>' },
+            { value: 'Completed', color: 'bg-green-100 text-green-800', icon: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>' }
         ];
 
         const dropdown = document.createElement('div');
@@ -2137,13 +2226,14 @@ async function changeWorkStatusOnly(workId, newStatus) {
         renderWorks();
         updateStats();
         updateMemberTiles();
+        updateMemberTiles();
         updateRecentActivity();
 
-        showNotification(`✅ Status updated to ${newStatus}`, 'success');
+        showNotification(`Status updated to ${newStatus}`, 'success');
 
         const work = works.find(w => w.id === workId);
         if (work) {
-            showBrowserNotification('🔄 Status Updated', {
+            showBrowserNotification('Status Updated', {
                 body: `"${work.work_name}" is now ${newStatus}`,
                 tag: 'status-change'
             });
@@ -2155,7 +2245,7 @@ async function changeWorkStatusOnly(workId, newStatus) {
 
     } catch (error) {
         console.error('Error updating work status:', error);
-        showNotification('❌ Failed to update status', 'error');
+        showNotification('Failed to update status', 'error');
         await refreshWorks();
     } finally {
         statusUpdateInProgress.delete(workId);
@@ -2346,12 +2436,14 @@ async function executeDeleteWork(workId) {
 
         if (error) throw error;
 
+        if (error) throw error;
+
         await refreshWorks();
-        showNotification('✅ Work deleted successfully!', 'success');
+        showNotification('Work deleted successfully!', 'success');
 
     } catch (error) {
         console.error('Error deleting work:', error);
-        showNotification('❌ Failed to delete work', 'error');
+        showNotification('Failed to delete work', 'error');
     }
 }
 
@@ -2947,3 +3039,26 @@ function formatRelativeTime(dateString) {
     // Fallback to simple date for older items
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
+
+// == GLOBAL ESCAPE HANDLER (FIX Z-ORDER) ==
+document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') {
+        const imageModal = document.getElementById('imageViewerModal');
+
+        // Priority 1: Image Viewer (Highest Z-Index)
+        if (imageModal && !imageModal.classList.contains('hidden')) {
+            // Close Image Viewer specifically
+            if (typeof closeImageViewer === 'function') {
+                closeImageViewer();
+            } else if (typeof window.closeImageViewer === 'function') {
+                window.closeImageViewer();
+            } else {
+                // Fallback manual close
+                imageModal.classList.add('hidden');
+            }
+            // CRITICAL: Stop propagation so underlying Listeners (Work Details) don't receive this event
+            event.stopImmediatePropagation();
+            event.preventDefault();
+        }
+    }
+}, true); // Capture Phase: True
