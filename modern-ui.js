@@ -112,6 +112,14 @@ function showModernStatusModal(workId, currentStatus, buttonElement) {
 async function handleStatusChange(workId, newStatus, element) {
     if (statusUpdateInProgress.has(workId)) return;
 
+    // Skip if same status
+    const work = works.find(w => w.id === workId);
+    if (work && work.status === newStatus) {
+        // Just close popover
+        document.querySelectorAll('.status-popover').forEach(popover => popover.remove());
+        return;
+    }
+
     // Show loading
     showLoadingOverlay('Updating status...');
 
@@ -211,7 +219,24 @@ const TIME_OPTIONS = [
     { label: '6:30 PM', value: '18:30' }
 ];
 
-function selectTimeOption(value, containerId) {
+function selectTimeOption(value, containerId, force = false) {
+    // Normalize value (handle HH:mm:ss -> HH:mm)
+    const normalizedValue = (value && value.length >= 5) ? value.substring(0, 5) : value;
+
+    // Check if date is selected first
+    const isEdit = containerId.includes('edit');
+    const dateInputId = isEdit ? 'editWorkDeadline' : 'workDeadline';
+    const dateValue = document.getElementById(dateInputId)?.value;
+
+    if (!dateValue && value !== '' && !force) {
+        if (typeof showNotification === 'function') {
+            showNotification('Please select a date first!', 'warning');
+        } else {
+            alert('Please select a date first!');
+        }
+        return;
+    }
+
     // Get the container - could be the grid itself or parent
     let container = document.getElementById(containerId);
     if (!container) return;
@@ -223,8 +248,8 @@ function selectTimeOption(value, containerId) {
     // Identify search container (the grid or flex container)
     const searchContainer = grid || container;
 
-    // Check if the clicked option is ALREADY selected
-    const targetOption = searchContainer.querySelector(`[data-value="${value}"]`);
+    // Check if the clicked option is ALREADY selected (using normalized value)
+    const targetOption = searchContainer.querySelector(`[data-value="${normalizedValue}"]`);
     const isAlreadySelected = targetOption && targetOption.classList.contains('selected');
 
     // Deselect all options first
@@ -236,13 +261,16 @@ function selectTimeOption(value, containerId) {
     const parentContainer = grid ? grid.closest('.time-select-simple')?.parentElement : container.parentElement;
     const hiddenInput = parentContainer?.querySelector('input[type="hidden"]');
 
-    if (isAlreadySelected) {
+    if (isAlreadySelected && !force) {
         // If it was selected, we leave it deselected (toggle off)
         if (hiddenInput) hiddenInput.value = '';
     } else {
-        // If it was NOT selected, select it now
+        // If it was NOT selected (or forced), select it now
         if (targetOption) targetOption.classList.add('selected');
-        if (hiddenInput) hiddenInput.value = value;
+        if (hiddenInput) {
+            // Keep the format used in buttons or the original if forced and matching
+            hiddenInput.value = targetOption ? targetOption.getAttribute('data-value') : (value || '');
+        }
     }
 }
 
@@ -273,11 +301,11 @@ async function handleWorkSubmit(formId, callback, successMessage) {
 // Export functions for global use
 if (typeof window !== 'undefined') {
     window.showModernStatusModal = showModernStatusModal;
-    window.handleStatusChange = handleStatusChange;
-    window.showLoadingOverlay = showLoadingOverlay;
-    window.hideLoadingOverlay = hideLoadingOverlay;
+    if (typeof handleStatusChange !== 'undefined') window.handleStatusChange = handleStatusChange;
+    if (typeof showLoadingOverlay !== 'undefined') window.showLoadingOverlay = showLoadingOverlay;
+    if (typeof hideLoadingOverlay !== 'undefined') window.hideLoadingOverlay = hideLoadingOverlay;
     window.selectTimeOption = selectTimeOption;
-    window.handleWorkSubmit = handleWorkSubmit;
+    if (typeof handleWorkSubmit !== 'undefined') window.handleWorkSubmit = handleWorkSubmit;
 }
 
 // == DRAG SCROLL FUNCTIONALITY ==
@@ -331,3 +359,5 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
+window.enableDragScroll = enableDragScroll;

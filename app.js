@@ -8,6 +8,7 @@ const memberAvatars = {
     'Niyas': 'niyas.jpg',
     'Muhammed': 'muhammed.jpg',
     'Noora': 'noora.jpg',
+    'Nihana': 'Nihana.jpg',
     'Najil': 'najil.jpg',
     'Safvan': 'safvan.jpg'
 };
@@ -26,14 +27,16 @@ let unpaidWorksCount = 0;
 let completedWorksCount = 0;
 let dueTodayWorksCount = 0;
 let works = [];
+let isWorksLoaded = false;
 let categories = [];
-let quickTasks = [];
+let enquiries = [];
 let currentWorkId = null;
-let editingWorkId = null;
+let currentCreatorFilter = 'all';
 let deleteWorkId = null;
-let showCompletedWorks = false;
-let showUnpaidWorks = false; // UPDATED: New state for unpaid works
+let deleteEnquiryId = null;
 let statusUpdateInProgress = new Set();
+let showUnpaidWorks = false; // UPDATED: New state for unpaid works
+let showCompletedWorks = false;
 let currentFilters = {
     member: 'all',
     status: 'all',
@@ -43,6 +46,8 @@ let currentFilters = {
 };
 let notificationsEnabled = false;
 let currentSearchTerm = '';
+let searchDebounceTimer = null;
+let deepSearchActive = false;
 let editCategorySelectionIndex = -1;
 
 // Image upload variables
@@ -117,7 +122,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         navigator.serviceWorker.register('sw.js').catch(err => console.log('SW registration failed'));
     }
 
-    await requestNotificationPermission();
+    requestNotificationPermission(); // Do not await, let it run in background
     setupKeyboardEventListeners();
     setupImageUpload();
 
@@ -131,23 +136,32 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('mainApp').classList.remove('hidden');
         document.getElementById('userName').textContent = savedUser;
         document.getElementById('profileUserName').textContent = savedUser;
-        document.getElementById('userAvatar').src = memberAvatars[savedUser];
+        
+        const userAvatarImg = document.getElementById('userAvatar');
+        if (userAvatarImg) {
+            userAvatarImg.src = memberAvatars[savedUser];
+            userAvatarImg.style.display = '';
+            if (userAvatarImg.nextElementSibling) {
+                userAvatarImg.nextElementSibling.style.display = 'none';
+            }
+        }
+        const fallbackElem = document.getElementById('userAvatarFallback');
+        if (fallbackElem) fallbackElem.textContent = savedUser[0].toUpperCase();
 
-        await Promise.all([
-            refreshWorks(),
-            refreshCategories(),
-            refreshQuickTasks()
-        ]);
+        // Show app UI and active tab immediately so user isn't stuck waiting
+        showTab('dashboard');
+        renderWorks();
+        updateStats();
+
+        // Fetch background data
+        refreshCategories();
+        refreshWorks();
+        refreshEnquiries();
 
         setupMemberFilters();
         subscribeToWorks();
         subscribeToNotifications();
-        subscribeToQuickTasks();
-
-        renderWorks();
-        updateStats();
-        updateMemberTiles();
-        showTab('dashboard');
+        subscribeToEnquiries();
     }
 
     setupDropdownHandlers();
@@ -163,213 +177,459 @@ function generateSessionId() {
     return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 }
 
-// == QUICK TASKS FUNCTIONALITY ==
-async function refreshQuickTasks() {
+// == ENQUIRIES FUNCTIONALITY ==
+let currentEnquirySearch = '';
+let currentEnquiryStatusFilter = 'all';
+
+async function refreshEnquiries() {
     try {
         const { data, error } = await sb
-            .from('quick_tasks')
+            .from('enquiries')
             .select('*')
             .order('created_at', { ascending: false });
 
         if (error) throw error;
-        quickTasks = data || [];
+        enquiries = data || [];
 
-        renderQuickTasks();
+        renderEnquiries();
     } catch (error) {
-        console.error('Error fetching quick tasks:', error);
-        showNotification('Failed to refresh quick tasks', 'error');
+        console.error('Error fetching enquiries:', error);
+        showNotification('Failed to refresh enquiries', 'error');
     }
 }
 
-function renderQuickTasks() {
-    const container = document.getElementById('quickTasksContainer');
-    if (!container) return;
 
-    const addButton = container.querySelector('.add-task-btn');
-    container.innerHTML = '';
-    if (addButton) {
-        container.appendChild(addButton);
+
+function handleEnquirySearch(term) {
+    currentEnquirySearch = (term || '').trim().toLowerCase();
+    renderEnquiries();
+}
+
+function filterEnquiriesByStatus(status) {
+    currentEnquiryStatusFilter = status;
+    
+    // Update active tab buttons
+    document.querySelectorAll('.enquiry-status-filter').forEach(btn => {
+        btn.classList.remove('bg-violet-600', 'text-white', 'shadow-sm');
+        btn.classList.add('text-gray-600', 'hover:bg-gray-100');
+    });
+
+    const activeTabKey = status === 'In Progress' ? 'InProgress' : status;
+    const activeBtn = document.getElementById(`enquiryTab-${activeTabKey}`);
+    if (activeBtn) {
+        activeBtn.classList.remove('text-gray-600', 'hover:bg-gray-100');
+        activeBtn.classList.add('bg-violet-600', 'text-white', 'shadow-sm');
     }
 
-    if (quickTasks.length === 0) {
-        document.getElementById('noQuickTasks')?.classList.remove('hidden');
-        return;
-    }
+    renderEnquiries();
+}
 
-    document.getElementById('noQuickTasks')?.classList.add('hidden');
+function getFilteredEnquiries() {
+    return enquiries.filter(e => {
+        // Status filter
+        if (currentEnquiryStatusFilter !== 'all') {
+            const eStatus = e.status || 'New';
+            if (eStatus !== currentEnquiryStatusFilter) return false;
+        }
 
-    const today = new Date().toDateString();
-    const tomorrow = new Date(Date.now() + 86400000).toDateString();
+        // Search term filter
+        if (currentEnquirySearch) {
+            const term = currentEnquirySearch.replace(/\s+/g, '');
+            const cName = (e.customer_name || '').toLowerCase();
+            const desc = (e.description || '').toLowerCase();
+            const rawPhone = (e.whatsapp_number || '').replace(/\s+/g, '').toLowerCase();
+            const staff = (e.assigned_staff || '').toLowerCase();
 
-    quickTasks.forEach(task => {
-        const taskCard = createQuickTaskCard(task, today, tomorrow);
-        container.appendChild(taskCard);
+            const matches = cName.includes(currentEnquirySearch) ||
+                            desc.includes(currentEnquirySearch) ||
+                            staff.includes(currentEnquirySearch) ||
+                            rawPhone.includes(term);
+            if (!matches) return false;
+        }
+
+        return true;
     });
 }
 
-function createQuickTaskCard(task, today, tomorrow) {
+function renderEnquiries() {
+    const container = document.getElementById('enquiriesContainer');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    const filtered = getFilteredEnquiries();
+
+    if (filtered.length === 0) {
+        document.getElementById('noEnquiries')?.classList.remove('hidden');
+        return;
+    }
+
+    document.getElementById('noEnquiries')?.classList.add('hidden');
+
+    filtered.forEach(enquiry => {
+        const enquiryCard = createEnquiryCard(enquiry);
+        container.appendChild(enquiryCard);
+    });
+}
+
+function openWhatsAppChat(phoneNumber, event) {
+    if (event) event.stopPropagation();
+    if (!phoneNumber) return;
+    const cleanNum = phoneNumber.replace(/[^0-9]/g, '');
+    if (!cleanNum) return;
+    window.open(`https://wa.me/${cleanNum}`, '_blank');
+}
+
+function createEnquiryCard(enquiry) {
     const div = document.createElement('div');
-    const avatar = memberAvatars[task.assigned_staff] || 'default-avatar.jpg';
 
-    let cardClass = 'quick-task-card';
-    let dueDateText = '';
+    // Status config
+    const statusConfig = {
+        'New': { bg: 'bg-blue-50 border-blue-200', text: 'text-blue-600', dot: 'bg-blue-500', bar: 'bg-blue-500' },
+        'In Progress': { bg: 'bg-amber-50 border-amber-200', text: 'text-amber-600', dot: 'bg-amber-500', bar: 'bg-amber-500' },
+        'Converted': { bg: 'bg-emerald-50 border-emerald-200', text: 'text-emerald-600', dot: 'bg-emerald-500', bar: 'bg-emerald-500' },
+        'Cancelled': { bg: 'bg-rose-50 border-rose-200', text: 'text-rose-600', dot: 'bg-rose-500', bar: 'bg-rose-500' }
+    };
 
-    if (task.completed) {
-        cardClass += ' completed';
-    }
+    const config = statusConfig[enquiry.status || 'New'] || statusConfig['New'];
+    const initial = (enquiry.customer_name || 'C').charAt(0).toUpperCase();
 
-    if (task.due_date) {
-        const taskDate = new Date(task.due_date).toDateString();
-        if (taskDate === today) {
-            cardClass += ' today';
-            dueDateText = '📅 Today';
-        } else if (taskDate === tomorrow) {
-            cardClass += ' tomorrow';
-            dueDateText = '🗓️ Tomorrow';
-        } else {
-            dueDateText = `📆 ${new Date(task.due_date).toLocaleDateString()}`;
-        }
-    }
-
-    div.className = cardClass;
+    div.className = 'bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:shadow-xl hover:border-violet-100 transition-all duration-300 flex flex-col h-full group relative overflow-hidden';
     div.innerHTML = `
-        <div class="flex items-start justify-between mb-3">
-            <div class="task-checkbox ${task.completed ? 'checked' : ''}" onclick="toggleQuickTask(${task.id})">
-                ${task.completed ? '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>' : ''}
+        <div class="absolute top-0 left-0 right-0 h-1.5 ${config.bar}"></div>
+
+        <div class="flex items-start justify-between gap-3 mb-4 pt-1">
+            <div class="min-w-0">
+                <h3 class="font-bold text-gray-900 text-base leading-tight truncate group-hover:text-violet-600 transition-colors">${enquiry.customer_name}</h3>
+                <p class="text-[11px] text-gray-400 font-medium tracking-wide">
+                    ${(() => {
+                        const created = new Date(enquiry.created_at);
+                        if (isNaN(created)) return '';
+                        const now = new Date();
+                        const isToday = now.toDateString() === created.toDateString();
+                        return isToday ? 'Today' : created.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    })()}
+                </p>
             </div>
-            <button onclick="deleteQuickTask(${task.id})" class="text-gray-400 hover:text-red-500 p-1 rounded transition-colors">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                </svg>
-            </button>
+
+            <div class="flex items-center gap-1.5 flex-shrink-0">
+                <div class="relative group/status">
+                    <button onclick="event.stopPropagation(); toggleEnquiryStatusDropdown(${enquiry.id})" class="px-2.5 py-1 ${config.bg} ${config.text} border rounded-full text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1.5 hover:opacity-90 transition-all shadow-2xs">
+                        <span class="w-1.5 h-1.5 rounded-full ${config.dot} animate-pulse"></span>
+                        ${enquiry.status || 'New'}
+                        <svg class="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="statusDropdown-${enquiry.id}" class="hidden absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-xl border border-gray-100 z-30 py-1.5 overflow-hidden">
+                        ${['New', 'In Progress', 'Converted', 'Cancelled'].map(s => `
+                            <button onclick="updateEnquiryStatus(${enquiry.id}, '${s}')" class="w-full text-left px-3 py-2 text-[11px] font-bold uppercase tracking-tight text-gray-600 hover:bg-gray-50 flex items-center gap-2">
+                                <span class="w-1.5 h-1.5 rounded-full ${statusConfig[s].dot}"></span>
+                                ${s}
+                            </button>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <button onclick="showEditEnquiryModal(${enquiry.id})" class="text-gray-300 hover:text-violet-600 p-1.5 rounded-lg hover:bg-violet-50 transition-colors" title="Edit Lead">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                    </svg>
+                </button>
+
+                <button onclick="deleteEnquiry(${enquiry.id})" class="text-gray-300 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition-colors" title="Delete Lead">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                    </svg>
+                </button>
+            </div>
         </div>
         
-        <h3 class="task-title font-semibold text-gray-800 mb-3">${task.task_name}</h3>
-        
-        <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-                <img src="${avatar}" alt="${task.assigned_staff}" class="w-6 h-6 rounded-full object-cover">
-                <span class="text-sm text-gray-600">${task.assigned_staff}</span>
-            </div>
-            ${dueDateText ? `<span class="text-xs text-gray-500">${dueDateText}</span>` : ''}
+        <div class="bg-gray-50/80 rounded-xl p-3.5 mb-4 flex-1 border border-gray-100/60">
+            <p class="text-xs text-gray-600 leading-relaxed italic line-clamp-3">
+                ${enquiry.description ? `"${enquiry.description}"` : '<span class="text-gray-400 not-italic">No requirement specified</span>'}
+            </p>
         </div>
         
-        <div class="mt-2 text-xs text-gray-400">
-            Created ${formatRelativeTime(task.created_at)}
+        <div class="grid grid-cols-2 gap-2 mt-auto pt-3 border-t border-gray-100">
+            ${enquiry.status !== 'Converted' ? `
+                <button onclick="convertEnquiryToWork(${enquiry.id})" class="flex items-center justify-center gap-1.5 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition-all shadow-sm shadow-emerald-100 active:scale-95">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg>
+                    Add to Work
+                </button>
+            ` : `
+                <button class="flex items-center justify-center gap-1.5 py-2.5 bg-gray-100 text-gray-400 rounded-xl text-xs font-bold cursor-not-allowed">
+                    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"></path></svg>
+                    Converted
+                </button>
+            `}
+            
+            ${enquiry.whatsapp_number ? `
+                <button onclick="copyToClipboard('${enquiry.whatsapp_number}', this)" class="flex items-center justify-center gap-1.5 py-2.5 bg-emerald-50 text-emerald-600 rounded-xl text-xs font-bold hover:bg-emerald-100 transition-all border border-emerald-100">
+                    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"></path></svg>
+                    <span>${enquiry.whatsapp_number}</span>
+                </button>
+            ` : `
+                <button class="flex items-center justify-center gap-1.5 py-2.5 bg-gray-50 text-gray-400 rounded-xl text-[10px] font-bold border border-gray-100 cursor-default opacity-60">
+                    <svg class="w-3.5 h-3.5 grayscale opacity-50" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"></path></svg>
+                    <span>No Number</span>
+                </button>
+            `}
         </div>
     `;
 
     return div;
 }
 
-async function toggleQuickTask(taskId) {
-    try {
-        const task = quickTasks.find(t => t.id === taskId);
-        if (!task) return;
+function toggleEnquiryStatusDropdown(enquiryId) {
+    const dropdown = document.getElementById(`statusDropdown-${enquiryId}`);
+    const isHidden = dropdown.classList.contains('hidden');
 
-        const { error } = await sb
-            .from('quick_tasks')
-            .update({ completed: !task.completed })
-            .eq('id', taskId);
+    // Close all other status dropdowns first
+    document.querySelectorAll('[id^="statusDropdown-"]').forEach(d => d.classList.add('hidden'));
 
-        if (error) throw error;
-
-        task.completed = !task.completed;
-        renderQuickTasks();
-
-        showNotification(task.completed ? 'Task completed!' : 'Task marked as pending', 'success');
-    } catch (error) {
-        console.error('Error updating task:', error);
-        showNotification('Failed to update task', 'error');
+    if (isHidden) {
+        dropdown.classList.remove('hidden');
     }
 }
 
-async function deleteQuickTask(taskId) {
-    if (!confirm('Are you sure you want to delete this task?')) return;
-
+async function updateEnquiryStatus(enquiryId, status) {
     try {
         const { error } = await sb
-            .from('quick_tasks')
+            .from('enquiries')
+            .update({ status: status })
+            .eq('id', enquiryId);
+
+        if (error) throw error;
+
+        showNotification(`Lead moved to ${status}`, 'success');
+        refreshEnquiries();
+    } catch (error) {
+        console.error('Error updating enquiry status:', error);
+        showNotification('Failed to update status', 'error');
+    }
+}
+
+async function convertEnquiryToWork(enquiryId) {
+    const enquiry = enquiries.find(e => e.id === enquiryId);
+    if (!enquiry) return;
+
+    // Show Add Work Tab
+    showTab('add');
+
+    // Pre-fill fields
+    document.getElementById('workName').value = `Enquiry: ${enquiry.customer_name}`;
+    document.getElementById('whatsappNumber').value = enquiry.whatsapp_number || '';
+    document.getElementById('workDescription').value = enquiry.description || '';
+
+    // Set Assigned Staff if any
+    if (enquiry.assigned_staff) {
+        window.selectStaffOption(enquiry.assigned_staff, 'assignStaffContainer', 'assignStaff');
+    }
+
+    showNotification('Converted enquiry details. Review and save!', 'info');
+}
+
+async function deleteEnquiry(enquiryId) {
+    const { data: enquiry, error } = await sb
+        .from('enquiries')
+        .select('customer_name')
+        .eq('id', enquiryId)
+        .single();
+    
+    if (error) {
+        console.error('Error fetching enquiry for delete:', error);
+        return;
+    }
+
+    deleteEnquiryId = enquiryId;
+    document.getElementById('enquiryDeleteConfirmText').textContent = 
+        `Are you sure you want to delete the enquiry from "${enquiry.customer_name}"? This action cannot be undone.`;
+    
+    const confirmBtn = document.getElementById('confirmEnquiryDeleteBtn');
+    confirmBtn.onclick = () => executeDeleteEnquiry(enquiryId);
+    
+    document.getElementById('enquiryDeleteConfirmModal').classList.remove('hidden');
+}
+
+function closeEnquiryDeleteModal() {
+    document.getElementById('enquiryDeleteConfirmModal').classList.add('hidden');
+    deleteEnquiryId = null;
+}
+
+async function executeDeleteEnquiry(enquiryId) {
+    try {
+        const { error } = await sb
+            .from('enquiries')
             .delete()
-            .eq('id', taskId);
+            .eq('id', enquiryId);
 
         if (error) throw error;
 
-        quickTasks = quickTasks.filter(t => t.id !== taskId);
-        renderQuickTasks();
-
-        showNotification('Task deleted successfully', 'success');
+        showNotification('Lead deleted successfully', 'success');
+        refreshEnquiries();
+        closeEnquiryDeleteModal();
     } catch (error) {
-        console.error('Error deleting task:', error);
-        showNotification('Failed to delete task', 'error');
+        console.error('Error deleting lead:', error);
+        showNotification('Failed to delete lead', 'error');
     }
 }
 
-// == QUICK TASK MODAL FUNCTIONS ==
-function showAddQuickTaskModal() {
-    resetQuickTaskForm();
-    document.getElementById('addQuickTaskModal').classList.remove('hidden');
+function showEditEnquiryModal(enquiryId) {
+    const enquiry = enquiries.find(e => e.id === enquiryId);
+    if (!enquiry) return;
+
+    document.getElementById('editEnquiryId').value = enquiry.id;
+    document.getElementById('editEnquiryCustomerName').value = enquiry.customer_name || '';
+    document.getElementById('editEnquiryWhatsapp').value = enquiry.whatsapp_number || '';
+    document.getElementById('editEnquiryDescription').value = enquiry.description || '';
+
+    document.getElementById('editEnquiryModal').classList.remove('hidden');
     setTimeout(() => {
-        document.getElementById('quickTaskName').focus();
+        document.getElementById('editEnquiryCustomerName').focus();
     }, 100);
 }
 
-function closeAddQuickTaskModal(event) {
-    if (event && event.target !== event.currentTarget) return;
-    document.getElementById('addQuickTaskModal').classList.add('hidden');
-    resetQuickTaskForm();
+function closeEditEnquiryModal() {
+    document.getElementById('editEnquiryModal').classList.add('hidden');
+    document.getElementById('editEnquiryForm').reset();
 }
 
-function resetQuickTaskForm() {
-    document.getElementById('addQuickTaskForm').reset();
-    document.getElementById('quickTaskStaffText').textContent = 'Select Staff Member';
-    document.getElementById('quickTaskStaff').value = '';
-    document.getElementById('quickTaskDate').value = '';
-    clearQuickTaskDateButtons();
-}
+async function handleEditEnquirySubmit(event) {
+    event.preventDefault();
+    const id = document.getElementById('editEnquiryId').value;
+    const customerName = document.getElementById('editEnquiryCustomerName')?.value.trim();
+    const whatsapp = document.getElementById('editEnquiryWhatsapp')?.value.trim() || '';
+    const description = document.getElementById('editEnquiryDescription')?.value.trim();
 
-function selectQuickTaskStaff(staffName) {
-    document.getElementById('quickTaskStaff').value = staffName;
-    document.getElementById('quickTaskStaffText').textContent = staffName;
-    closeAllDropdowns();
-}
-
-function setQuickTaskDate(type) {
-    clearQuickTaskDateButtons();
-
-    const today = new Date();
-    let targetDate;
-
-    if (type === 'today') {
-        targetDate = today;
-        document.getElementById('todayBtn').classList.add('bg-yellow-100', 'border-yellow-300', 'text-yellow-800');
-    } else if (type === 'tomorrow') {
-        targetDate = new Date(today.getTime() + 86400000);
-        document.getElementById('tomorrowBtn').classList.add('bg-blue-100', 'border-blue-300', 'text-blue-800');
+    if (!id || !customerName || !description) {
+        showNotification('Please fill in Customer Name and Description', 'warning');
+        return;
     }
 
-    document.getElementById('quickTaskDate').value = targetDate.toISOString().split('T')[0];
+    try {
+        const { error } = await sb
+            .from('enquiries')
+            .update({
+                customer_name: customerName,
+                whatsapp_number: whatsapp,
+                description: description
+            })
+            .eq('id', id);
+
+        if (error) throw error;
+
+        closeEditEnquiryModal();
+        showNotification('Enquiry updated successfully! ✨', 'success');
+        refreshEnquiries();
+    } catch (error) {
+        console.error('Error updating enquiry:', error);
+        showNotification('Failed to update enquiry: ' + (error.message || error), 'error');
+    }
 }
 
-function clearQuickTaskDate() {
-    document.getElementById('quickTaskDate').value = '';
-    clearQuickTaskDateButtons();
+function showAddEnquiryModal() {
+    resetEnquiryForm();
+    document.getElementById('addEnquiryModal').classList.remove('hidden');
+    setTimeout(() => {
+        document.getElementById('enquiryCustomerName').focus();
+    }, 100);
 }
 
-function clearQuickTaskDateButtons() {
-    ['todayBtn', 'tomorrowBtn'].forEach(id => {
-        const btn = document.getElementById(id);
-        btn.classList.remove('bg-yellow-100', 'border-yellow-300', 'text-yellow-800', 'bg-blue-100', 'border-blue-300', 'text-blue-800');
-    });
+function closeAddEnquiryModal() {
+    document.getElementById('addEnquiryModal').classList.add('hidden');
+    resetEnquiryForm();
 }
 
-function toggleQuickTaskStaffDropdown() {
-    toggleDropdown('quickTaskStaffDropdown', 'quickTaskStaffIcon');
+function resetEnquiryForm() {
+    const form = document.getElementById('addEnquiryForm');
+    if (form) form.reset();
 }
 
-// == UPDATED: REAL-TIME SEARCH FUNCTIONALITY ==
+async function handleEnquirySubmit(event) {
+    event.preventDefault();
+    const customerName = document.getElementById('enquiryCustomerName')?.value.trim();
+    const whatsapp = document.getElementById('enquiryWhatsapp')?.value.trim() || '';
+    const description = document.getElementById('enquiryDescription')?.value.trim();
+
+    if (!customerName || !description) {
+        showNotification('Please fill in Customer Name and Description', 'warning');
+        return;
+    }
+
+    try {
+        const { error } = await sb
+            .from('enquiries')
+            .insert([{
+                customer_name: customerName,
+                whatsapp_number: whatsapp,
+                description: description,
+                created_by: currentUser
+            }]);
+
+        if (error) throw error;
+
+        closeAddEnquiryModal();
+        showNotification('New enquiry added! 🚀', 'success');
+        refreshEnquiries();
+    } catch (error) {
+        console.error('Error adding enquiry:', error);
+        showNotification('Failed to add enquiry: ' + (error.message || error), 'error');
+    }
+}
+
+// == UPDATED: REAL-TIME SEARCH FUNCTIONALITY WITH DEBOUNCE ==
 function handleRealtimeSearch(searchTerm) {
-    currentSearchTerm = searchTerm.toLowerCase().trim();
+    const clearBtn = document.getElementById('searchClearBtn');
+
+    // Immediate UI feedback for clear button
+    if (clearBtn) {
+        if (searchTerm.trim()) {
+            clearBtn.classList.remove('hidden');
+        } else {
+            clearBtn.classList.add('hidden');
+        }
+    }
+
+    // Debounce the actual search and render
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+        currentSearchTerm = searchTerm.toLowerCase().trim();
+        renderWorks();
+        updateMemberTiles();
+    }, 250);
+}
+
+function toggleDeepSearch() {
+    deepSearchActive = !deepSearchActive;
+
+    // Clear staff filter to ensure true global search
+    if (deepSearchActive) {
+        currentFilters.member = 'all';
+        // Update UI tiles
+        document.querySelectorAll('.member-tile').forEach(tile => {
+            tile.classList.remove('active');
+            if (tile.textContent.includes('All')) {
+                tile.classList.add('active');
+            }
+        });
+    }
+
+    renderWorks();
+}
+
+function clearSearch() {
+    const searchInput = document.getElementById('workSearchInput');
+    const clearBtn = document.getElementById('searchClearBtn');
+
+    if (searchInput) {
+        searchInput.value = '';
+        currentSearchTerm = '';
+        // Keep deepSearchActive - only reset in clearAllFilters
+    }
+
+    if (clearBtn) {
+        clearBtn.classList.add('hidden');
+    }
+
     renderWorks();
 }
 
@@ -600,6 +860,12 @@ function viewImage(url) {
     }
 }
 
+// Track where mousedown started to prevent drag-selection from closing modals
+let modalMousedownTarget = null;
+document.addEventListener('mousedown', (e) => {
+    modalMousedownTarget = e.target;
+});
+
 function closeImageViewer() {
     const modal = document.getElementById('imageViewerModal');
     if (modal) {
@@ -607,11 +873,104 @@ function closeImageViewer() {
     }
 }
 
+async function downloadImage() {
+    const img = document.getElementById('imageViewerImg');
+    if (!img || !img.src) return;
+
+    try {
+        // Fetch the image as a blob
+        const response = await fetch(img.src);
+        const blob = await response.blob();
+
+        // Create a download link
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+
+        // Extract filename from URL or use timestamp
+        const urlParts = img.src.split('/');
+        const filename = urlParts[urlParts.length - 1] || `image_${Date.now()}.jpg`;
+        a.download = filename;
+
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+        showNotification('Image downloaded successfully', 'success');
+    } catch (error) {
+        console.error('Download failed:', error);
+        showNotification('Failed to download image', 'error');
+    }
+}
+
+async function copyImage() {
+    const img = document.getElementById('imageViewerImg');
+    if (!img || !img.src) return;
+
+    try {
+        // Try to fetch the image as a blob
+        const response = await fetch(img.src);
+        const blob = await response.blob();
+
+        // Copy to clipboard using the Clipboard API
+        await navigator.clipboard.write([
+            new ClipboardItem({
+                [blob.type]: blob
+            })
+        ]);
+
+        showNotification('Image copied to clipboard', 'success');
+    } catch (error) {
+        console.error('Copy failed:', error);
+
+        // Fallback: Use canvas to copy the image
+        try {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            // Create a new image to avoid CORS issues
+            const image = new Image();
+            image.crossOrigin = 'anonymous';
+
+            await new Promise((resolve, reject) => {
+                image.onload = resolve;
+                image.onerror = reject;
+                image.src = img.src;
+            });
+
+            canvas.width = image.naturalWidth;
+            canvas.height = image.naturalHeight;
+            ctx.drawImage(image, 0, 0);
+
+            // Convert canvas to blob
+            const canvasBlob = await new Promise(resolve => {
+                canvas.toBlob(resolve, 'image/png');
+            });
+
+            // Copy the blob to clipboard
+            await navigator.clipboard.write([
+                new ClipboardItem({
+                    'image/png': canvasBlob
+                })
+            ]);
+
+            showNotification('Image copied to clipboard', 'success');
+        } catch (canvasError) {
+            console.error('Canvas copy failed:', canvasError);
+            showNotification('Failed to copy image. Try downloading instead.', 'error');
+        }
+    }
+}
+
 // == KEYBOARD EVENT LISTENERS ==
 function setupKeyboardEventListeners() {
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
-            if (!document.getElementById('workDetailsModal').classList.contains('hidden')) {
+            // Check image viewer first (highest priority)
+            if (!document.getElementById('imageViewerModal').classList.contains('hidden')) {
+                closeImageViewer();
+            } else if (!document.getElementById('workDetailsModal').classList.contains('hidden')) {
                 closeWorkDetailsModal();
             } else if (!document.getElementById('editWorkModal').classList.contains('hidden')) {
                 closeEditModal();
@@ -623,8 +982,8 @@ function setupKeyboardEventListeners() {
                 closeAddQuickTaskModal();
             } else if (!document.getElementById('logoutConfirmModal').classList.contains('hidden')) {
                 closeLogoutConfirmModal();
-            } else if (!document.getElementById('imageViewerModal').classList.contains('hidden')) {
-                closeImageViewer();
+            } else if (!document.getElementById('enquiryDeleteConfirmModal').classList.contains('hidden')) {
+                closeEnquiryDeleteModal();
             } else {
                 closeAllDropdowns();
                 // Also close edit category dropdown explicitly if it exists
@@ -655,22 +1014,50 @@ function setupKeyboardEventListeners() {
 
 // == MODAL CLOSE HANDLERS ==
 function closeWorkDetailsModal(event) {
+    // Prevent closing if we are dragging selection out of the modal
+    if (event && event.type === 'click' && modalMousedownTarget !== event.currentTarget) return;
     if (event && event.target !== event.currentTarget) return;
+
+    // Clear any text selection when clicking the backdrop
+    if (window.getSelection) {
+        window.getSelection().removeAllRanges();
+    }
 
     const modal = document.getElementById('workDetailsModal');
     if (modal) {
         modal.classList.add('hidden');
+
+        // Restore scroll position
+        const scrollY = document.body.style.top;
         document.body.classList.remove('overflow-hidden');
+        document.body.style.top = '';
+        if (scrollY) {
+            window.scrollTo(0, parseInt(scrollY || '0') * -1);
+        }
     }
 }
 
 function closeEditModal(event) {
+    // Prevent closing if we are dragging selection out of the modal
+    if (event && event.type === 'click' && modalMousedownTarget !== event.currentTarget) return;
     if (event && event.target !== event.currentTarget) return;
+
+    // Clear any text selection when clicking the backdrop
+    if (window.getSelection) {
+        window.getSelection().removeAllRanges();
+    }
 
     const modal = document.getElementById('editWorkModal');
     if (modal) {
         modal.classList.add('hidden');
+
+        // Restore scroll position
+        const scrollY = document.body.style.top;
         document.body.classList.remove('overflow-hidden');
+        document.body.style.top = '';
+        if (scrollY) {
+            window.scrollTo(0, parseInt(scrollY || '0') * -1);
+        }
     }
     editingWorkId = null;
     editUploadedImages = [];
@@ -716,8 +1103,8 @@ function closeLogoutConfirmModal() {
 }
 
 function confirmLogout() {
-    executeLogout();
     closeLogoutConfirmModal();
+    executeLogout();
 }
 
 // == CATEGORIES MANAGEMENT ==
@@ -868,8 +1255,10 @@ function updateCategorySelection(options) {
 
 function selectCategory(categoryName) {
     document.getElementById('workCategory').value = categoryName;
-    document.getElementById('categoryText').textContent = categoryName;
-    document.getElementById('categorySearch').value = '';
+    const input = document.getElementById('categoryInput');
+    if (input) input.value = categoryName;
+    const text = document.getElementById('categoryText');
+    if (text) text.textContent = categoryName;
     closeAllDropdowns();
     filterCategories('');
 }
@@ -889,7 +1278,7 @@ function showAddCategoryModal() {
     }, 100);
 }
 
-function toggleEditCategorySearchDropdown() {
+function toggleEditCategorySearchDropdown(forceOpen) {
     const dropdown = document.getElementById('editCategorySearchDropdown');
     const icon = document.getElementById('editCategoryIcon');
 
@@ -897,34 +1286,18 @@ function toggleEditCategorySearchDropdown() {
 
     const isHidden = dropdown.classList.contains('hidden');
 
-    // Close all other dropdowns first
-    // We assume closeAllDropdowns exists, but if not found, we skip it.
     if (typeof closeAllDropdowns === 'function') {
         closeAllDropdowns();
     }
 
-    // Toggle logic based on PREVIOUS state
-    if (isHidden) {
+    if (forceOpen || isHidden) {
         dropdown.classList.remove('hidden');
         if (icon) icon.style.transform = 'rotate(180deg)';
-
-        // Focus search and pre-select first item
-        setTimeout(() => {
-            const searchInput = document.getElementById('editCategorySearch');
-            if (searchInput) {
-                searchInput.value = ''; // Clear search
-                searchInput.focus();
-                filterEditCategories(''); // Reset filter
-
-                // Highlight first item
-                editCategorySelectionIndex = 0;
-                const options = document.querySelectorAll('#editCategoryOptions .dropdown-item');
-                updateEditCategorySelection(options);
-            }
-        }, 50);
+        const searchInput = document.getElementById('editCategoryInput');
+        if (searchInput) {
+            filterEditCategories(searchInput.value || '');
+        }
     } else {
-        // If it was open, closeAllDropdowns already closed it effectively, 
-        // but let's ensure icon is reset.
         dropdown.classList.add('hidden');
         if (icon) icon.style.transform = 'rotate(0deg)';
     }
@@ -1001,8 +1374,10 @@ function updateEditCategorySelection(options) {
 
 function selectEditCategory(categoryName) {
     document.getElementById('editWorkCategory').value = categoryName;
-    document.getElementById('editCategoryText').textContent = categoryName;
-    document.getElementById('editCategorySearch').value = '';
+    const input = document.getElementById('editCategoryInput');
+    if (input) input.value = categoryName;
+    const text = document.getElementById('editCategoryText');
+    if (text) text.textContent = categoryName;
 
     // Explicitly close the edit dropdown
     const dropdown = document.getElementById('editCategorySearchDropdown');
@@ -1172,50 +1547,7 @@ function setupFormHandlers() {
         });
     }
 
-    const addQuickTaskForm = document.getElementById('addQuickTaskForm');
-    if (addQuickTaskForm) {
-        addQuickTaskForm.addEventListener('submit', async function (e) {
-            e.preventDefault();
 
-            const taskName = document.getElementById('quickTaskName').value.trim();
-            const assignedStaff = document.getElementById('quickTaskStaff').value;
-            const dueDate = document.getElementById('quickTaskDate').value;
-
-            if (!taskName) {
-                showNotification('❌ Please enter a task name', 'error');
-                return;
-            }
-
-            if (!assignedStaff) {
-                showNotification('❌ Please select a staff member', 'error');
-                return;
-            }
-
-            const taskData = {
-                task_name: taskName,
-                assigned_staff: assignedStaff,
-                due_date: dueDate || null,
-                created_by: currentUser
-            };
-
-            try {
-                const { data, error } = await sb
-                    .from('quick_tasks')
-                    .insert([taskData])
-                    .select();
-
-                if (error) throw error;
-
-                await refreshQuickTasks();
-                closeAddQuickTaskModal();
-                showNotification('Quick task added successfully!', 'success');
-
-            } catch (error) {
-                console.error('Error adding quick task:', error);
-                showNotification('Failed to add quick task', 'error');
-            }
-        });
-    }
 
     const editWorkForm = document.getElementById('editWorkForm');
     if (editWorkForm) {
@@ -1336,6 +1668,10 @@ function closeAllDropdowns() {
     document.querySelectorAll('.status-dropdown-menu').forEach(dropdown => {
         dropdown.remove();
     });
+
+    document.querySelectorAll('[id^="statusDropdown-"]').forEach(dropdown => {
+        dropdown.classList.add('hidden');
+    });
 }
 
 function toggleDropdown(dropdownId, iconId) {
@@ -1382,22 +1718,51 @@ function togglePriorityDropdown() {
     toggleDropdown('priorityDropdown', 'priorityIcon');
 }
 
-function toggleCategorySearchDropdown() {
-    toggleDropdown('categorySearchDropdown', 'categoryIcon');
-    setTimeout(() => {
-        const searchInput = document.getElementById('categorySearch');
+function toggleCategorySearchDropdown(forceOpen) {
+    const dropdown = document.getElementById('categorySearchDropdown');
+    const icon = document.getElementById('categoryIcon');
+    if (!dropdown) return;
+
+    const isHidden = dropdown.classList.contains('hidden');
+
+    if (typeof closeAllDropdowns === 'function') {
+        closeAllDropdowns();
+    }
+
+    if (forceOpen || isHidden) {
+        dropdown.classList.remove('hidden');
+        if (icon) icon.style.transform = 'rotate(180deg)';
+        const searchInput = document.getElementById('categoryInput');
         if (searchInput) {
-            searchInput.focus();
+            filterCategories(searchInput.value || '');
         }
-    }, 100);
+    } else {
+        dropdown.classList.add('hidden');
+        if (icon) icon.style.transform = 'rotate(0deg)';
+    }
 }
 
 // == FILTER SELECTION FUNCTIONS ==
 function selectStatusFilter(value) {
     currentFilters.status = value;
     document.getElementById('statusFilterText').textContent = value === 'all' ? 'All Status' : value;
+
+    // Toggle historical view modes if specifically selected from dropdown
+    if (value === 'Completed') {
+        showCompletedWorks = true;
+        showUnpaidWorks = false;
+    } else if (value === 'Unpaid') {
+        showUnpaidWorks = true;
+        showCompletedWorks = false;
+    } else if (value !== 'all') {
+        // If selecting a specific active status, ensure we aren't in history mode
+        showCompletedWorks = false;
+        showUnpaidWorks = false;
+    }
+
     closeAllDropdowns();
     renderWorks();
+    updateMemberTiles();
 }
 
 function selectCreatorFilter(value) {
@@ -1441,6 +1806,7 @@ function cancelAddWork() {
 function clearAllFilters() {
     showCompletedWorks = false;
     showUnpaidWorks = false; // UPDATED: Clear unpaid filter
+    deepSearchActive = false; // Reset deep search when clearing all filters
     currentFilters = {
         member: 'all',
         status: 'all',
@@ -1449,8 +1815,9 @@ function clearAllFilters() {
         category: 'all'
     };
 
-    currentSearchTerm = '';
-    document.getElementById('workSearchInput').value = '';
+    // Preserve currentSearchTerm and search input value
+    // currentSearchTerm = '';
+    // document.getElementById('workSearchInput').value = '';
 
     document.getElementById('statusFilterText').textContent = 'All Status';
     document.getElementById('categoryFilterText').textContent = 'All Categories';
@@ -1484,23 +1851,56 @@ function selectMemberTile(member) {
 }
 
 function updateMemberTiles() {
-    // UPDATED: Exclude unpaid works from member tile counts unless showing unpaid
-    let worksToCount = works;
-    if (!showCompletedWorks && !showUnpaidWorks) {
-        worksToCount = works.filter(w => w.status !== 'Completed' && w.status !== 'Unpaid');
-    } else if (showCompletedWorks) {
-        worksToCount = works.filter(w => w.status === 'Completed');
-    } else if (showUnpaidWorks) {
-        worksToCount = works.filter(w => w.status === 'Unpaid');
+    let baseWorks = works;
+
+    if (currentWorkViewMode === 'active') {
+        baseWorks = works.filter(w => w.status !== 'Completed' && w.status !== 'Unpaid');
+    } else if (currentWorkViewMode === 'unpaid') {
+        baseWorks = works.filter(w => w.status === 'Unpaid');
+    } else if (currentWorkViewMode === 'completed') {
+        baseWorks = works.filter(w => w.status === 'Completed');
+    } else if (currentWorkViewMode === 'all') {
+        baseWorks = works;
     }
 
+    let contextWorks = baseWorks;
+
+    // Apply Search
+    if (currentSearchTerm) {
+        const termNoSpace = currentSearchTerm.replace(/\s+/g, '');
+        contextWorks = baseWorks.filter(work => {
+            const workName = (work.work_name || '').toLowerCase();
+            const description = (work.description || '').toLowerCase();
+            const whatsappNumber = (work.whatsapp_number || '').replace(/\s+/g, '').toLowerCase();
+            const category = (work.category || '').toLowerCase();
+
+            return workName.includes(currentSearchTerm) ||
+                description.includes(currentSearchTerm) ||
+                whatsappNumber.includes(termNoSpace) ||
+                category.includes(currentSearchTerm);
+        });
+    }
+
+    // Apply other filters (Status, Category, Creator)
+    if (currentFilters.status !== 'all' && currentWorkViewMode === 'active') {
+        contextWorks = contextWorks.filter(w => w.status === currentFilters.status);
+    }
+    if (currentFilters.category !== 'all') {
+        contextWorks = contextWorks.filter(w => w.category === currentFilters.category);
+    }
+    if (currentFilters.creator !== 'all') {
+        contextWorks = contextWorks.filter(w => w.created_by === currentFilters.creator);
+    }
+
+    // Calculate final counts
     const counts = {
-        all: worksToCount.length,
-        Irshad: worksToCount.filter(w => w.assigned_staff === 'Irshad').length,
-        Niyas: worksToCount.filter(w => w.assigned_staff === 'Niyas').length,
-        Muhammed: worksToCount.filter(w => w.assigned_staff === 'Muhammed').length,
-        Noora: worksToCount.filter(w => w.assigned_staff === 'Noora').length,
-        Safvan: worksToCount.filter(w => w.assigned_staff === 'Safvan').length
+        all: contextWorks.length,
+        Irshad: contextWorks.filter(w => w.assigned_staff === 'Irshad').length,
+        Niyas: contextWorks.filter(w => w.assigned_staff === 'Niyas').length,
+        Muhammed: contextWorks.filter(w => w.assigned_staff === 'Muhammed').length,
+        Nihana: contextWorks.filter(w => w.assigned_staff === 'Nihana').length,
+        Safvan: contextWorks.filter(w => w.assigned_staff === 'Safvan').length,
+        Najil: contextWorks.filter(w => w.assigned_staff === 'Najil').length
     };
 
     const countElements = [
@@ -1508,8 +1908,9 @@ function updateMemberTiles() {
         { id: 'irshadCount', count: counts.Irshad },
         { id: 'niyasCount', count: counts.Niyas },
         { id: 'muhammedCount', count: counts.Muhammed },
-        { id: 'nooraCount', count: counts.Noora },
-        { id: 'safvanCount', count: counts.Safvan }
+        { id: 'nihanaCount', count: counts.Nihana },
+        { id: 'safvanCount', count: counts.Safvan },
+        { id: 'najilCount', count: counts.Najil }
     ];
 
     countElements.forEach(({ id, count }) => {
@@ -1521,30 +1922,93 @@ function updateMemberTiles() {
 }
 
 // == UPDATED: DASHBOARD NAVIGATION WITH UNPAID SUPPORT ==
+// == SEGMENTED WORK VIEW TABS CONTROL ==
+let currentWorkViewMode = 'active';
+
+function setWorkViewMode(mode) {
+    currentWorkViewMode = mode;
+
+    if (mode === 'all') {
+        showCompletedWorks = true;
+        showUnpaidWorks = true;
+        currentFilters.status = 'all';
+    } else if (mode === 'active') {
+        showCompletedWorks = false;
+        showUnpaidWorks = false;
+        currentFilters.status = 'all';
+    } else if (mode === 'unpaid') {
+        showUnpaidWorks = true;
+        showCompletedWorks = false;
+        currentFilters.status = 'Unpaid';
+    } else if (mode === 'completed') {
+        showCompletedWorks = true;
+        showUnpaidWorks = false;
+        currentFilters.status = 'Completed';
+    }
+
+    updateWorkViewTabsUI();
+    renderWorks();
+    updateMemberTiles();
+}
+
+function updateWorkViewTabsUI() {
+    const allBtn = document.getElementById('viewAllBtn');
+    const activeBtn = document.getElementById('viewActiveBtn');
+    const unpaidBtn = document.getElementById('viewUnpaidBtn');
+    const completedBtn = document.getElementById('viewCompletedBtn');
+
+    if (!activeBtn || !unpaidBtn || !completedBtn) return;
+
+    const allButtons = [allBtn, activeBtn, unpaidBtn, completedBtn].filter(Boolean);
+
+    allButtons.forEach(btn => {
+        btn.classList.remove('active', 'bg-white', 'text-gray-900', 'shadow-2xs');
+        btn.classList.add('text-gray-600');
+    });
+
+    if (currentWorkViewMode === 'all' && allBtn) {
+        allBtn.classList.add('active', 'bg-white', 'text-gray-900', 'shadow-2xs');
+        allBtn.classList.remove('text-gray-600');
+    } else if (currentWorkViewMode === 'active' && activeBtn) {
+        activeBtn.classList.add('active', 'bg-white', 'text-gray-900', 'shadow-2xs');
+        activeBtn.classList.remove('text-gray-600');
+    } else if (currentWorkViewMode === 'unpaid' && unpaidBtn) {
+        unpaidBtn.classList.add('active', 'bg-white', 'text-gray-900', 'shadow-2xs');
+        unpaidBtn.classList.remove('text-gray-600');
+    } else if (currentWorkViewMode === 'completed' && completedBtn) {
+        completedBtn.classList.add('active', 'bg-white', 'text-gray-900', 'shadow-2xs');
+        completedBtn.classList.remove('text-gray-600');
+    }
+
+    const allCount = works.length;
+    const activeCount = works.filter(w => w.status !== 'Completed' && w.status !== 'Unpaid').length;
+    const unpaidCount = works.filter(w => w.status === 'Unpaid').length;
+    const completedCount = works.filter(w => w.status === 'Completed').length;
+
+    const allBadge = document.getElementById('allBadgeCount');
+    const activeBadge = document.getElementById('activeBadgeCount');
+    const unpaidBadge = document.getElementById('unpaidBadgeCount');
+    const completedBadge = document.getElementById('completedBadgeCount');
+
+    if (allBadge) allBadge.textContent = isWorksLoaded ? allCount : '...';
+    if (activeBadge) activeBadge.textContent = isWorksLoaded ? activeCount : '...';
+    if (unpaidBadge) unpaidBadge.textContent = isWorksLoaded ? unpaidCount : '...';
+    if (completedBadge) completedBadge.textContent = isWorksLoaded ? completedCount : '...';
+}
+
 function goToWorksWithFilter(filterType) {
     showTab('works');
 
-    // Reset filter states
-    showCompletedWorks = false;
-    showUnpaidWorks = false;
-
-    if (filterType === 'Active') {
-        // Show pending + in progress + proof works
-        currentFilters.status = 'all';
-        currentFilters.member = 'all';
-        renderWorks();
-    } else if (filterType === 'Completed') {
-        showCompletedWorks = true;
-        selectStatusFilter('Completed');
+    if (filterType === 'Completed') {
+        setWorkViewMode('completed');
     } else if (filterType === 'Unpaid') {
-        // UPDATED: New unpaid filter
-        showUnpaidWorks = true;
-        selectStatusFilter('Unpaid');
+        setWorkViewMode('unpaid');
     } else if (filterType === 'today') {
+        setWorkViewMode('active');
         currentFilters.deadline = 'today';
         renderWorks();
-    } else if (filterType === 'all') {
-        selectStatusFilter('all');
+    } else {
+        setWorkViewMode('active');
     }
 }
 
@@ -1563,13 +2027,29 @@ async function requestNotificationPermission() {
 
 function showBrowserNotification(title, options = {}) {
     if (notificationsEnabled && 'Notification' in window) {
-        new Notification(title, {
+        const swOptions = {
             icon: options.icon || 'logo.png',
             body: options.body || '',
             image: options.image,
+            badge: 'logo.png',
+            tag: options.tag || 'work-update',
             requireInteraction: false,
+            vibrate: [100, 50, 100],
+            data: {
+                url: './'
+            },
             ...options
-        });
+        };
+
+        // Use Service Worker if available (much more stable in background/minimized states)
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.ready.then(registration => {
+                registration.showNotification(title, swOptions);
+            });
+        } else {
+            // Fallback to standard client-side Notification
+            new Notification(title, swOptions);
+        }
     }
 }
 
@@ -1623,28 +2103,39 @@ function loginUser(name, role) {
     document.getElementById('mainApp').classList.remove('hidden');
     document.getElementById('userName').textContent = name;
     document.getElementById('profileUserName').textContent = name;
-    document.getElementById('userAvatar').src = memberAvatars[name];
+    
+    const userAvatarImg = document.getElementById('userAvatar');
+    if (userAvatarImg) {
+        userAvatarImg.src = memberAvatars[name];
+        userAvatarImg.style.display = '';
+        if (userAvatarImg.nextElementSibling) {
+            userAvatarImg.nextElementSibling.style.display = 'none';
+        }
+    }
+    const fallbackElem = document.getElementById('userAvatarFallback');
+    if (fallbackElem) fallbackElem.textContent = name[0].toUpperCase();
 
-    Promise.all([
-        refreshWorks(),
-        refreshCategories(),
-        refreshQuickTasks()
-    ]).then(() => {
-        setupMemberFilters();
-        subscribeToWorks();
-        subscribeToNotifications();
-        subscribeToQuickTasks();
+    // Sequential load — avoids network race on login
+    refreshCategories();
+    refreshWorks();
+    refreshEnquiries();
 
-        renderWorks();
-        updateStats();
-        updateMemberTiles();
-        showTab('dashboard');
+    setupMemberFilters();
+    subscribeToWorks();
+    subscribeToNotifications();
+    subscribeToEnquiries();
 
-        showNotification(`Welcome back, ${name}!`, 'success');
-    });
+    renderWorks();
+    updateStats();
+    updateMemberTiles();
+    showTab('dashboard');
+
+    showNotification(`Welcome back, ${name}!`, 'success');
 }
 
 function executeLogout() {
+    closeLogoutConfirmModal();
+
     localStorage.removeItem('currentUser');
     localStorage.removeItem('currentUserRole');
 
@@ -1709,15 +2200,15 @@ function subscribeToNotifications() {
         .subscribe();
 }
 
-function subscribeToQuickTasks() {
+function subscribeToEnquiries() {
     sb
-        .channel('quick-tasks-changes')
+        .channel('enquiries-changes')
         .on('postgres_changes',
-            { event: '*', schema: 'public', table: 'quick_tasks' },
+            { event: '*', schema: 'public', table: 'enquiries' },
             async (payload) => {
-                console.log('🔄 Quick tasks table changed:', payload);
+                console.log('🔄 Enquiries table changed:', payload);
                 setTimeout(async () => {
-                    await refreshQuickTasks();
+                    await refreshEnquiries();
                 }, 500);
             }
         )
@@ -1725,55 +2216,40 @@ function subscribeToQuickTasks() {
 }
 
 // == WORKS MANAGEMENT ==
-async function refreshWorks() {
+async function refreshWorks(retries = 3) {
     try {
         const todayStr = new Date().toISOString().split('T')[0];
 
-        const [
-            worksResponse,
-            activeResponse,
-            unpaidResponse,
-            completedResponse,
-            dueTodayResponse
-        ] = await Promise.all([
-            // 1. Fetch Works List
-            sb.from('works')
-                .select('*', { count: 'exact' })
+        // Fetch ALL works from Supabase using pagination to bypass the 1000-row return limit
+        let allWorks = [];
+        let from = 0;
+        const limit = 1000;
+        let hasMore = true;
+
+        while (hasMore) {
+            const { data, error } = await sb
+                .from('works')
+                .select('*')
                 .order('created_at', { ascending: false })
-                .limit(5000),
+                .range(from, from + limit - 1);
 
-            // 2. Count Active
-            sb.from('works')
-                .select('*', { count: 'exact', head: true })
-                .in('status', ['Pending', 'In Progress', 'Proof']),
+            if (error) throw error;
 
-            // 3. Count Unpaid
-            sb.from('works')
-                .select('*', { count: 'exact', head: true })
-                .eq('status', 'Unpaid'),
+            allWorks = allWorks.concat(data || []);
+            if (!data || data.length < limit) {
+                hasMore = false;
+            } else {
+                from += limit;
+            }
+        }
 
-            // 4. Count Completed
-            sb.from('works')
-                .select('*', { count: 'exact', head: true })
-                .eq('status', 'Completed'),
-
-            // 5. Count Due Today (Active only)
-            sb.from('works')
-                .select('*', { count: 'exact', head: true })
-                .eq('deadline', todayStr)
-                .neq('status', 'Completed')
-        ]);
-
-        if (worksResponse.error) throw worksResponse.error;
-
-        works = worksResponse.data || [];
-        totalWorksCount = worksResponse.count || works.length;
-
-        // Update Stats Globals
-        activeWorksCount = activeResponse.count || 0;
-        unpaidWorksCount = unpaidResponse.count || 0;
-        completedWorksCount = completedResponse.count || 0;
-        dueTodayWorksCount = dueTodayResponse.count || 0;
+        works = allWorks;
+        totalWorksCount = works.length;
+        activeWorksCount = works.filter(w => ['Pending', 'In Progress', 'Proof'].includes(w.status)).length;
+        unpaidWorksCount = works.filter(w => w.status === 'Unpaid').length;
+        completedWorksCount = works.filter(w => w.status === 'Completed').length;
+        dueTodayWorksCount = works.filter(w => w.deadline === todayStr && w.status !== 'Completed').length;
+        isWorksLoaded = true;
 
         renderWorks();
         updateStats();
@@ -1781,18 +2257,27 @@ async function refreshWorks() {
         updateRecentActivity();
     } catch (error) {
         console.error('Error fetching works:', error);
-        showNotification('Failed to refresh works', 'error');
+        if (retries > 1) {
+            // Retry silently after short delay — don't bother user
+            await new Promise(r => setTimeout(r, 1500));
+            return refreshWorks(retries - 1);
+        }
+        showNotification('Failed to load works. Please check connection.', 'error');
     }
 }
 
-// == UPDATED: FILTER WORKS WITH UNPAID EXCLUSION ==
+// == UPDATED: FILTER WORKS WITH PERFORMANCE OPTIMIZATION ==
+let foundHiddenMatchesCount = 0; // State for UI button
+
 function filterWorks() {
     let filteredWorks = [...works];
+    foundHiddenMatchesCount = 0;
 
     // Apply search filter first
     if (currentSearchTerm) {
+        const termNoSpace = currentSearchTerm.replace(/\s+/g, '');
+
         filteredWorks = filteredWorks.filter(work => {
-            const term = currentSearchTerm.replace(/\s+/g, '');
             const workName = (work.work_name || '').toLowerCase();
             const description = (work.description || '').toLowerCase();
             const whatsappNumber = (work.whatsapp_number || '').replace(/\s+/g, '').toLowerCase();
@@ -1800,23 +2285,39 @@ function filterWorks() {
 
             return workName.includes(currentSearchTerm) ||
                 description.includes(currentSearchTerm) ||
-                whatsappNumber.includes(term) ||
+                whatsappNumber.includes(termNoSpace) ||
                 category.includes(currentSearchTerm);
         });
     }
 
-    // UPDATED: Handle different view modes
+    // Handle different view modes
     if (showUnpaidWorks) {
-        // Show only unpaid works
         filteredWorks = filteredWorks.filter(work => work.status === 'Unpaid');
     } else if (showCompletedWorks) {
-        // Show only completed works
         filteredWorks = filteredWorks.filter(work => work.status === 'Completed');
     } else {
-        // UPDATED: Exclude both completed and unpaid works from main view
-        filteredWorks = filteredWorks.filter(work =>
-            work.status !== 'Completed' && work.status !== 'Unpaid'
-        );
+        // Main view logic
+        if (currentSearchTerm && !deepSearchActive) {
+            // Check status of ALL matches to see if some are in history
+            const activeMatches = [];
+
+            filteredWorks.forEach(work => {
+                const isHistory = work.status === 'Completed' || work.status === 'Unpaid';
+                if (isHistory) {
+                    foundHiddenMatchesCount++;
+                } else {
+                    activeMatches.push(work);
+                }
+            });
+
+            filteredWorks = activeMatches;
+        } else if (!currentSearchTerm) {
+            // Default active view: Exclude history
+            filteredWorks = filteredWorks.filter(work =>
+                work.status !== 'Completed' && work.status !== 'Unpaid'
+            );
+        }
+        // If deepSearchActive, we keep everything that matched the term above
     }
 
     if (currentFilters.member !== 'all') {
@@ -1880,7 +2381,18 @@ function filterWorks() {
     return filteredWorks;
 }
 
-function renderWorks() {
+let currentRenderLimit = 50;
+
+window.loadMoreWorks = function() {
+    currentRenderLimit += 50;
+    renderWorks(false);
+};
+
+function renderWorks(resetLimit = true) {
+    if (resetLimit) {
+        currentRenderLimit = 50;
+    }
+
     const container = document.getElementById('worksCardsContainer');
     const noWorks = document.getElementById('noWorks');
 
@@ -1897,7 +2409,22 @@ function renderWorks() {
 
     const filteredWorks = filterWorks();
 
-    if (filteredWorks.length === 0) {
+    // Clean up deep search toggle if it exists
+    const existingToggle = document.getElementById('deepSearchToggle');
+    if (existingToggle) existingToggle.remove();
+
+    if (!isWorksLoaded) {
+        container.innerHTML = `
+            <div class="col-span-full flex flex-col items-center justify-center py-20 text-gray-500">
+                <svg class="w-10 h-10 animate-spin text-indigo-500 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                <p class="font-medium animate-pulse">Loading workspace...</p>
+            </div>
+        `;
+        if (noWorks) noWorks.classList.add('hidden');
+        return;
+    }
+
+    if (filteredWorks.length === 0 && foundHiddenMatchesCount === 0) {
         container.innerHTML = '';
         if (noWorks) noWorks.classList.remove('hidden');
         return;
@@ -1905,8 +2432,43 @@ function renderWorks() {
 
     if (noWorks) noWorks.classList.add('hidden');
 
+    // Slice for performance
+    const worksToRender = filteredWorks.slice(0, currentRenderLimit);
+
     // == UPDATE DOM ==
-    container.innerHTML = filteredWorks.map(work => createWorkCard(work)).join('');
+    container.innerHTML = worksToRender.map(work => createWorkCard(work)).join('');
+
+    // Ensure staff counts are updated based on the current view mode
+    updateMemberTiles();
+
+    // Add Load More Button
+    if (filteredWorks.length > currentRenderLimit) {
+        const loadMoreDiv = document.createElement('div');
+        loadMoreDiv.className = 'col-span-full flex justify-center mt-6 mb-8';
+        loadMoreDiv.innerHTML = `
+            <button onclick="loadMoreWorks()" class="px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-all font-bold shadow-sm flex items-center gap-2 cursor-pointer active:scale-95">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                Load More (${filteredWorks.length - currentRenderLimit} remaining)
+            </button>
+        `;
+        container.appendChild(loadMoreDiv);
+    }
+
+    // Add Deep Search Toggle if hidden matches exist
+    if (foundHiddenMatchesCount > 0 && !deepSearchActive) {
+        const toggleDiv = document.createElement('div');
+        toggleDiv.id = 'deepSearchToggle';
+        toggleDiv.className = 'col-span-full mt-4 mb-8'; // Added margin for spacing
+        toggleDiv.innerHTML = `
+            <button onclick="toggleDeepSearch()" class="w-full py-4 bg-gray-50 border border-dashed border-gray-300 rounded-xl text-gray-600 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600 transition-all flex items-center justify-center gap-2 group">
+                <svg class="w-5 h-5 group-hover:animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+                <span class="font-medium">Found ${foundHiddenMatchesCount} more matches in History. <span class="underline">Search Everywhere?</span></span>
+            </button>
+        `;
+        container.appendChild(toggleDiv);
+    }
 
     // == FLIP ANIMATION: LAST, INVERT, PLAY ==
     container.querySelectorAll('.work-card').forEach(newCard => {
@@ -1963,7 +2525,19 @@ function renderWorks() {
 function createWorkCard(work) {
     const isOverdueWork = isOverdue(work);
     const deadlineText = formatDeadline(work);
-    const avatar = memberAvatars[work.assigned_staff] || 'default-avatar.jpg';
+    const staffName = (work.assigned_staff || '').trim();
+    const avatar = memberAvatars[staffName] || 'default-avatar.jpg';
+    const isUnassigned = !staffName || staffName.toLowerCase() === 'unassigned';
+
+    // Better Staff Display Logic for Work Cards
+    const staffAvatarHtml = isUnassigned 
+        ? `<div class="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center ring-2 ring-gray-50 shadow-sm">
+             <svg class="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"></path></svg>
+           </div>`
+        : `<div class="relative w-6 h-6">
+               <img src="${avatar}" alt="${staffName}" class="w-full h-full rounded-full object-cover ring-2 ring-gray-50 shadow-sm" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+               <div class="hidden absolute inset-0 w-6 h-6 rounded-full bg-indigo-50 flex items-center justify-center ring-2 ring-gray-50 shadow-sm"><span class="text-[9px] font-bold text-indigo-600">${staffName[0]}</span></div>
+           </div>`;
 
     const priorityColors = {
         'High': 'bg-red-100 text-red-800',
@@ -2010,12 +2584,12 @@ function createWorkCard(work) {
                 </button>
             </div>
 
-            <h3 class="font-semibold text-gray-800 text-lg leading-snug mb-3 line-clamp-2 ${isOverdueWork ? 'text-red-700' : ''}" title="${work.work_name}">${work.work_name}</h3>
+            <h3 class="font-semibold text-gray-800 text-lg leading-snug mb-3 line-clamp-2 ${isOverdueWork ? 'text-red-700' : ''}" title="${work.work_name || 'Untitled Work'}">${work.work_name || 'Untitled Work'}</h3>
 
             <div class="flex flex-wrap items-center gap-y-2 gap-x-3 mb-3">
                 <div class="flex items-center gap-2">
-                    <img src="${avatar}" alt="${work.assigned_staff}" class="w-8 h-8 rounded-full object-cover ring-1 ring-gray-100">
-                    <span class="text-sm font-medium text-gray-700 truncate max-w-[100px]">${work.assigned_staff}</span>
+                    ${staffAvatarHtml}
+                    <span class="text-sm font-medium ${isUnassigned ? 'text-gray-400 italic' : 'text-gray-700'} mt-1 truncate max-w-[100px]">${isUnassigned ? 'Unassigned' : staffName}</span>
                 </div>
                 
                 <div class="flex items-center gap-1.5 px-2 py-1 rounded-md ${isOverdueWork ? 'bg-red-100/50 text-red-700' : 'bg-gray-50 text-gray-600'}">
@@ -2043,7 +2617,7 @@ function createWorkCard(work) {
                         </button>
                     ` : ''}
                     
-                    <button onclick="event.stopPropagation(); editWork(${work.id})" class="text-gray-400 hover:text-indigo-600 p-1.5 transition-colors">
+                    <button onclick="event.stopPropagation(); window.editWork(${work.id})" class="text-gray-400 hover:text-indigo-600 p-1.5 transition-colors">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
                     </button>
                     
@@ -2115,7 +2689,7 @@ function createWorkCard_OLD(work) {
 
                     <!-- Staff (Middle) -->
                     <div class="flex items-center gap-2 mt-3">
-                        <img src="${avatar}" alt="${work.assigned_staff}" class="w-6 h-6 rounded-full object-cover ring-2 ring-gray-50 shadow-sm">
+                        ${staffAvatarHtml}
                         <span class="text-sm font-semibold text-gray-700 truncate">${work.assigned_staff}</span>
                     </div>
                 </div>
@@ -2307,7 +2881,7 @@ function showWorkDetails(workId) {
             ${work.description ? `
                 <div class="bg-gray-50 p-3 rounded-xl border border-gray-100">
                     <h4 class="text-xs font-bold text-gray-400 uppercase mb-1">Description</h4>
-                    <p class="text-gray-700 text-sm whitespace-pre-wrap ${work.description.length > 100 ? 'line-clamp-2' : ''}" id="desc_${work.id}">${work.description}</p>
+                    <p class="text-gray-700 text-sm whitespace-pre-wrap selectable-text ${work.description.length > 100 ? 'line-clamp-2' : ''}" id="desc_${work.id}">${work.description}</p>
                     ${work.description.length > 100 ? `<button onclick="this.previousElementSibling.classList.toggle('line-clamp-2'); this.textContent = this.previousElementSibling.classList.contains('line-clamp-2') ? 'See more' : 'See less'" class="text-blue-600 text-xs mt-1 font-medium hover:underline focus:outline-none">See more</button>` : ''}
                 </div>
             ` : ''}
@@ -2319,8 +2893,14 @@ function showWorkDetails(workId) {
                  <div>
                     <span class="text-gray-400 text-xs font-medium block uppercase tracking-wider">Assigned To</span>
                     <div class="flex items-center gap-2 mt-1">
-                        <img src="${avatar}" class="w-8 h-8 rounded-full object-cover ring-2 ring-gray-100">
-                        <div class="text-sm font-semibold text-gray-700">${work.assigned_staff}</div>
+                        <div class="relative w-8 h-8">
+                            <img src="${avatar}" class="w-8 h-8 rounded-full object-cover ring-2 ring-gray-100" 
+                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            <div class="hidden absolute inset-0 w-8 h-8 rounded-full bg-indigo-50 items-center justify-center ring-2 ring-indigo-100">
+                                <span class="text-[10px] font-bold text-indigo-600">${(work.assigned_staff || 'U')[0]}</span>
+                            </div>
+                        </div>
+                        <div class="text-sm font-semibold text-gray-700">${work.assigned_staff || 'Unassigned'}</div>
                     </div>
                  </div>
                  <div>
@@ -2381,6 +2961,10 @@ function showWorkDetails(workId) {
     if (modalContent) {
         modalContent.innerHTML = content;
         document.getElementById('workDetailsModal').classList.remove('hidden');
+
+        // Preserve scroll position when modal opens
+        const scrollY = window.scrollY;
+        document.body.style.top = `-${scrollY}px`;
         document.body.classList.add('overflow-hidden');
     }
 }
@@ -2395,6 +2979,10 @@ function editWork(workId) {
 
     document.getElementById('editWorkName').value = work.work_name || '';
     document.getElementById('editWorkCategory').value = work.category || '';
+    const editCategoryInput = document.getElementById('editCategoryInput');
+    if (editCategoryInput) {
+        editCategoryInput.value = work.category || '';
+    }
     const categoryText = document.getElementById('editCategoryText');
     if (categoryText) {
         categoryText.textContent = work.category || 'Select Category';
@@ -2407,23 +2995,37 @@ function editWork(workId) {
     // Update Staff Selection
     const assignedStaff = work.assigned_staff || '';
     document.getElementById('editAssignStaff').value = assignedStaff;
-    selectStaffOption(assignedStaff, 'editAssignStaffContainer', 'editAssignStaff');
+    if (typeof window.selectStaffOption === 'function') {
+        window.selectStaffOption(assignedStaff, 'editAssignStaffContainer', 'editAssignStaff');
+    } else if (typeof selectStaffOption === 'function') {
+        selectStaffOption(assignedStaff, 'editAssignStaffContainer', 'editAssignStaff');
+    }
 
     document.getElementById('editWorkStatus').value = work.status || 'Pending';
     document.getElementById('editWorkStatus').value = work.status || 'Pending';
     const deadlineDate = work.deadline || '';
     document.getElementById('editWorkDeadline').value = deadlineDate;
-    updateDateButtons(deadlineDate, 'editWorkDateButtons');
+    if (typeof window.updateDateButtons === 'function') {
+        window.updateDateButtons(deadlineDate, 'editWorkDateButtons');
+    } else if (typeof updateDateButtons === 'function') {
+        updateDateButtons(deadlineDate, 'editWorkDateButtons');
+    }
 
     document.getElementById('editWorkDeadlineTime').value = work.deadline_time || '';
-    if (typeof selectTimeOption === 'function') {
-        // Ensure visual state matches the value
-        selectTimeOption(work.deadline_time || '', 'editWorkDeadlineTimeContainer');
+    if (typeof window.selectTimeOption === 'function') {
+        // Ensure visual state matches the value, use 'true' to force selection without toggling
+        window.selectTimeOption(work.deadline_time || '', 'editWorkDeadlineTimeContainer', true);
+    } else if (typeof selectTimeOption === 'function') {
+        selectTimeOption(work.deadline_time || '', 'editWorkDeadlineTimeContainer', true);
     }
     document.getElementById('editWorkPriority').value = work.priority || 'Medium';
 
     updateEditImagePreview();
     document.getElementById('editWorkModal').classList.remove('hidden');
+
+    // Preserve scroll position when modal opens
+    const scrollY = window.scrollY;
+    document.body.style.top = `-${scrollY}px`;
     document.body.classList.add('overflow-hidden');
 }
 
@@ -2511,7 +3113,15 @@ function formatRelativeTime(dateString) {
 
     if (diffInSeconds < 60) return 'Just now';
     if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    if (diffInSeconds < 86400) {
+        const hours = Math.floor(diffInSeconds / 3600);
+        return `${hours}h ago`;
+    }
+    
+    const yesterday = new Date();
+    yesterday.setDate(now.getDate() - 1);
+    if (yesterday.toDateString() === date.toDateString()) return 'Yesterday';
+    
     if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)}d ago`;
 
     return date.toLocaleDateString('en-US', {
@@ -2548,11 +3158,15 @@ function updateStats() {
     const completedWorksElement = document.getElementById('completedWorks');
     const dueTodayWorksElement = document.getElementById('dueTodayWorks');
 
-    if (totalWorksElement) totalWorksElement.textContent = totalWorksCount;
-    if (activeWorksElement) activeWorksElement.textContent = activeWorksCount;
-    if (unpaidWorksElement) unpaidWorksElement.textContent = unpaidWorksCount;
-    if (completedWorksElement) completedWorksElement.textContent = completedWorksCount;
-    if (dueTodayWorksElement) dueTodayWorksElement.textContent = dueTodayWorksCount;
+    const loaderHTML = `<svg class="w-6 h-6 animate-spin mx-auto text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+
+    if (totalWorksElement) totalWorksElement.innerHTML = isWorksLoaded ? totalWorksCount : loaderHTML;
+    if (activeWorksElement) activeWorksElement.innerHTML = isWorksLoaded ? activeWorksCount : loaderHTML;
+    if (unpaidWorksElement) unpaidWorksElement.innerHTML = isWorksLoaded ? unpaidWorksCount : loaderHTML;
+    if (completedWorksElement) completedWorksElement.innerHTML = isWorksLoaded ? completedWorksCount : loaderHTML;
+    if (dueTodayWorksElement) dueTodayWorksElement.innerHTML = isWorksLoaded ? dueTodayWorksCount : loaderHTML;
+
+    updateWorkViewTabsUI();
 }
 
 function updateRecentActivity() {
@@ -2590,8 +3204,12 @@ function updateRecentActivity() {
 
         return `
             <div class="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer group" onclick="showWorkDetails(${work.id})">
-                <div class="relative">
-                    <img src="${avatar}" alt="${work.assigned_staff}" class="w-9 h-9 rounded-full object-cover ring-2 ring-white shadow-sm">
+                <div class="relative w-9 h-9">
+                    <img src="${avatar}" alt="${work.assigned_staff}" class="w-9 h-9 rounded-full object-cover ring-2 ring-white shadow-sm"
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    <div class="hidden absolute inset-0 w-9 h-9 rounded-full bg-indigo-50 items-center justify-center ring-2 ring-white shadow-sm">
+                        <span class="text-xs font-bold text-indigo-600">${(work.assigned_staff || 'U')[0]}</span>
+                    </div>
                 </div>
                 
                 <div class="flex-1 min-w-0">
@@ -2629,19 +3247,23 @@ function resetForm() {
             const checkIcon = option.querySelector('.check-icon');
             const label = option.querySelector('span');
 
-            img.classList.add('ring-transparent', 'grayscale');
-            img.classList.remove('ring-indigo-500', 'ring-offset-2');
-            checkIcon?.classList.add('opacity-0');
-            label.classList.remove('text-indigo-600', 'font-bold');
-            label.classList.add('text-gray-500');
+            if (img) {
+                img.classList.add('ring-transparent', 'grayscale');
+                img.classList.remove('ring-indigo-500', 'ring-offset-2');
+            }
+            if (checkIcon) checkIcon.classList.add('opacity-0');
+            if (label) {
+                label.classList.remove('text-indigo-600', 'font-bold');
+                label.classList.add('text-gray-500');
+            }
         });
     }
 
     document.getElementById('workPriority').value = 'Medium';
 
-    const categorySearch = document.getElementById('categorySearch');
-    if (categorySearch) {
-        categorySearch.value = '';
+    const categoryInput = document.getElementById('categoryInput');
+    if (categoryInput) {
+        categoryInput.value = '';
         filterCategories('');
     }
 
@@ -2661,6 +3283,7 @@ function resetForm() {
 function showTab(tabName) {
     if (tabName !== 'works') {
         currentSearchTerm = '';
+        deepSearchActive = false;
         const searchInput = document.getElementById('workSearchInput');
         if (searchInput) {
             searchInput.value = '';
@@ -2698,8 +3321,8 @@ function showTab(tabName) {
     } else if (tabName === 'dashboard') {
         updateStats();
         updateRecentActivity();
-    } else if (tabName === 'tasks') {
-        renderQuickTasks();
+    } else if (tabName === 'enquiries') {
+        refreshEnquiries();
     }
 }
 
@@ -2752,6 +3375,7 @@ window.cancelAddWork = cancelAddWork;
 window.clearAllFilters = clearAllFilters;
 window.selectMemberTile = selectMemberTile;
 window.toggleFilters = toggleFilters;
+window.setWorkViewMode = setWorkViewMode;
 window.goToWorksWithFilter = goToWorksWithFilter;
 window.selectStatusFilter = selectStatusFilter;
 window.selectCategoryFilter = selectCategoryFilter;
@@ -2764,16 +3388,12 @@ window.togglePriorityDropdown = togglePriorityDropdown;
 window.toggleCategorySearchDropdown = toggleCategorySearchDropdown;
 window.toggleProfileDropdown = toggleProfileDropdown;
 window.handleRealtimeSearch = handleRealtimeSearch;
+window.clearSearch = clearSearch;
+window.toggleDeepSearch = toggleDeepSearch;
 
-// Quick tasks functions
-window.showAddQuickTaskModal = showAddQuickTaskModal;
-window.closeAddQuickTaskModal = closeAddQuickTaskModal;
-window.selectQuickTaskStaff = selectQuickTaskStaff;
-window.setQuickTaskDate = setQuickTaskDate;
-window.clearQuickTaskDate = clearQuickTaskDate;
-window.toggleQuickTaskStaffDropdown = toggleQuickTaskStaffDropdown;
-window.toggleQuickTask = toggleQuickTask;
-window.deleteQuickTask = deleteQuickTask;
+// Quick tasks functions (Removed due to missing implementation)
+
+// Enquiry exports
 
 // Image functions
 window.handleImageUpload = handleImageUpload;
@@ -2781,6 +3401,8 @@ window.handleEditImageUpload = handleEditImageUpload;
 window.removeImage = removeImage;
 window.viewImage = viewImage;
 window.closeImageViewer = closeImageViewer;
+window.downloadImage = downloadImage;
+window.copyImage = copyImage;
 
 
 // Edit Work Category Dropdown Exports
@@ -2795,6 +3417,7 @@ window.handleEditModalClick = handleEditModalClick;
 function setupStaffSelection() {
     renderStaffSelection('assignStaffContainer', 'assignStaff');
     renderStaffSelection('editAssignStaffContainer', 'editAssignStaff');
+    renderStaffSelection('enquiryStaffContainer', 'enquiryStaff');
 }
 
 function renderStaffSelection(containerId, inputId) {
@@ -2802,18 +3425,23 @@ function renderStaffSelection(containerId, inputId) {
     if (!container) return;
 
     container.innerHTML = '';
-    const staffMembers = ['Irshad', 'Niyas', 'Muhammed', 'Noora', 'Safvan'];
+    const staffMembers = ['Irshad', 'Niyas', 'Muhammed', 'Nihana', 'Safvan'];
 
     staffMembers.forEach(name => {
         const avatar = memberAvatars[name] || 'default-avatar.jpg';
         const div = document.createElement('div');
         div.className = 'staff-option flex flex-col items-center gap-2 cursor-pointer group transition-all duration-200';
         div.setAttribute('data-value', name);
-        div.onclick = () => selectStaffOption(name, containerId, inputId);
+        div.onclick = () => window.selectStaffOption(name, containerId, inputId);
 
         div.innerHTML = `
-            <div class="relative">
-                <img src="${avatar}" alt="${name}" class="w-12 h-12 rounded-full object-cover ring-2 ring-transparent grayscale group-hover:grayscale-0 group-hover:ring-indigo-200 transition-all duration-300">
+            <div class="relative w-12 h-12">
+                <img src="${avatar}" alt="${name}" 
+                     class="w-12 h-12 rounded-full object-cover ring-2 ring-transparent grayscale group-hover:grayscale-0 group-hover:ring-indigo-200 transition-all duration-300"
+                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                <div class="hidden absolute inset-0 w-12 h-12 rounded-full bg-indigo-50 items-center justify-center ring-2 ring-indigo-200">
+                    <span class="text-sm font-bold text-indigo-600">${name[0]}</span>
+                </div>
                 <div class="absolute -bottom-1 -right-1 bg-indigo-500 rounded-full p-0.5 opacity-0 transition-opacity duration-200 check-icon text-white ring-2 ring-white">
                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
                 </div>
@@ -2824,7 +3452,7 @@ function renderStaffSelection(containerId, inputId) {
     });
 }
 
-window.selectStaffOption = function (name, containerId, inputId) {
+function selectStaffOption(name, containerId, inputId) {
     const container = document.getElementById(containerId);
     const input = document.getElementById(inputId);
     if (!container || !input) return;
@@ -2838,25 +3466,35 @@ window.selectStaffOption = function (name, containerId, inputId) {
         const label = option.querySelector('span');
 
         if (isSelected) {
-            img.classList.remove('ring-transparent', 'grayscale');
-            img.classList.add('ring-indigo-500', 'ring-offset-2');
+            if (img) {
+                img.classList.remove('ring-transparent', 'grayscale');
+                img.classList.add('ring-indigo-500', 'ring-offset-2');
+            }
             checkIcon?.classList.remove('opacity-0');
-            label.classList.add('text-indigo-600', 'font-bold');
-            label.classList.remove('text-gray-500');
+            if (label) {
+                label.classList.add('text-indigo-600', 'font-bold');
+                label.classList.remove('text-gray-500');
+            }
             option.classList.add('transform', 'scale-105');
         } else {
-            img.classList.add('ring-transparent', 'grayscale');
-            img.classList.remove('ring-indigo-500', 'ring-offset-2');
+            if (img) {
+                img.classList.add('ring-transparent', 'grayscale');
+                img.classList.remove('ring-indigo-500', 'ring-offset-2');
+            }
             checkIcon?.classList.add('opacity-0');
-            label.classList.remove('text-indigo-600', 'font-bold');
-            label.classList.add('text-gray-500');
+            if (label) {
+                label.classList.remove('text-indigo-600', 'font-bold');
+                label.classList.add('text-gray-500');
+            }
             option.classList.remove('transform', 'scale-105');
         }
     });
-};
+}
+
+window.selectStaffOption = selectStaffOption;
 
 // Date Handling Functions
-window.setDeadlineDate = function (type, inputId, containerId) {
+function setDeadlineDate(type, inputId, containerId) {
     const input = document.getElementById(inputId);
     if (!input) return;
 
@@ -2880,9 +3518,11 @@ window.setDeadlineDate = function (type, inputId, containerId) {
 
     input.value = dateString;
     updateDateButtons(dateString, containerId);
-};
+}
 
-window.updateDateButtons = function (dateValue, containerId) {
+window.setDeadlineDate = setDeadlineDate;
+
+function updateDateButtons(dateValue, containerId) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
@@ -2914,7 +3554,9 @@ window.updateDateButtons = function (dateValue, containerId) {
             btn.classList.add('bg-transparent', 'text-gray-500', 'hover:text-gray-900');
         }
     });
-};
+}
+
+window.updateDateButtons = updateDateButtons;
 
 // == UPDATE NOTES MODAL ==
 function showUpdateNotes() {
@@ -2934,7 +3576,7 @@ function showUpdateNotes() {
                 </div>
                 <div class="relative z-10">
                     <span class="inline-block py-1 px-3 rounded-full bg-white/20 text-xs font-bold tracking-wider mb-3 backdrop-blur-md border border-white/20 shadow-sm">MAJOR UPDATE</span>
-                    <h2 class="text-3xl font-extrabold mb-2 tracking-tight">Welcome to v5.0</h2>
+                    <h2 class="text-3xl font-extrabold mb-2 tracking-tight">Welcome to v6.0</h2>
                     <p class="text-indigo-100 font-medium">Experience the new standard of productivity.</p>
                 </div>
                 <button onclick="closeUpdateNotes()" class="absolute top-4 right-4 text-white/70 hover:text-white transition-colors bg-white/10 hover:bg-white/20 p-2 rounded-full cursor-pointer">
@@ -2949,8 +3591,8 @@ function showUpdateNotes() {
                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"/></svg>
                             </div>
                             <div>
-                                <h3 class="font-bold text-gray-900 text-lg">Redesigned Navigation</h3>
-                                <p class="text-gray-600 text-sm mt-1 leading-relaxed">A completely overhauled header with glassmorphism effects, cleaner typography, and a new responsive horizontal tab bar for mobile devices.</p>
+                                <h3 class="font-bold text-gray-900 text-lg">Full Database Loader</h3>
+                                <p class="text-gray-600 text-sm mt-1 leading-relaxed">No more truncated lists. We load all 2400+ works dynamically, making older entries (like Najil's completed works) instantly searchable.</p>
                             </div>
                         </div>
                     </div>
@@ -2958,11 +3600,11 @@ function showUpdateNotes() {
                     <div class="p-6 hover:bg-gray-50 transition-colors group">
                         <div class="flex gap-4">
                             <div class="flex-shrink-0 w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-300">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
                             </div>
                             <div>
-                                <h3 class="font-bold text-gray-900 text-lg">Smart Date Presets</h3>
-                                <p class="text-gray-600 text-sm mt-1 leading-relaxed">Setting deadlines is faster than ever. Use the new one-tap "Today" and "Tomorrow" buttons to quickly schedule your work.</p>
+                                <h3 class="font-bold text-gray-900 text-lg">Background Notifications</h3>
+                                <p class="text-gray-600 text-sm mt-1 leading-relaxed">PWA Service Worker integration ensures you get real-time browser alerts even when the app is minimized to the taskbar.</p>
                             </div>
                         </div>
                     </div>
@@ -2970,11 +3612,11 @@ function showUpdateNotes() {
                     <div class="p-6 hover:bg-gray-50 transition-colors group">
                         <div class="flex gap-4">
                             <div class="flex-shrink-0 w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-300">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                             </div>
                             <div>
-                                <h3 class="font-bold text-gray-900 text-lg">Smart Layout Engine</h3>
-                                <p class="text-gray-600 text-sm mt-1 leading-relaxed">Work cards now intelligently adapt to your content. Long titles and staff names are gracefully handled without breaking the grid.</p>
+                                <h3 class="font-bold text-gray-900 text-lg">Native Date Calendar</h3>
+                                <p class="text-gray-600 text-sm mt-1 leading-relaxed">No more clicking on the tiny calendar icon. Clicking anywhere on the deadline date field now opens the calendar picker immediately.</p>
                             </div>
                         </div>
                     </div>
@@ -2982,18 +3624,18 @@ function showUpdateNotes() {
                     <div class="p-6 hover:bg-gray-50 transition-colors group">
                         <div class="flex gap-4">
                             <div class="flex-shrink-0 w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-300">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                             </div>
                             <div>
-                                <h3 class="font-bold text-gray-900 text-lg">Interaction Fixes</h3>
-                                <p class="text-gray-600 text-sm mt-1 leading-relaxed">Resolved critical issues with the "Cancel" button and improved scroll locking behavior for a stable, glitch-free experience.</p>
+                                <h3 class="font-bold text-gray-900 text-lg">Streamlined Workspace</h3>
+                                <p class="text-gray-600 text-sm mt-1 leading-relaxed">Cleaned up the interface by removing redundant filters and clear buttons, making the workspace extremely tidy and focused.</p>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
             <div class="p-6 bg-gray-50 border-t border-gray-100">
-                <button onclick="closeUpdateNotes()" class="w-full py-4 bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-bold shadow-lg shadow-gray-200 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer">Explore v5.0 Features</button>
+                <button onclick="closeUpdateNotes()" class="w-full py-4 bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-bold shadow-lg shadow-gray-200 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer">Explore v6.0 Features</button>
             </div>
         </div>
     `;
@@ -3021,24 +3663,22 @@ function closeUpdateNotes() {
 window.showUpdateNotes = showUpdateNotes;
 window.closeUpdateNotes = closeUpdateNotes;
 
-// Utility to format relative time (e.g., "2h ago")
-function formatRelativeTime(dateString) {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInSeconds = Math.floor((now - date) / 1000);
+// Expose Enquiry Functions Globally
+window.showAddEnquiryModal = showAddEnquiryModal;
+window.closeAddEnquiryModal = closeAddEnquiryModal;
+window.handleEnquirySubmit = handleEnquirySubmit;
+window.filterEnquiriesByStatus = filterEnquiriesByStatus;
+window.handleEnquirySearch = handleEnquirySearch;
+window.openWhatsAppChat = openWhatsAppChat;
+window.showEditEnquiryModal = showEditEnquiryModal;
+window.closeEditEnquiryModal = closeEditEnquiryModal;
+window.handleEditEnquirySubmit = handleEditEnquirySubmit;
+window.convertEnquiryToWork = convertEnquiryToWork;
+window.deleteEnquiry = deleteEnquiry;
+window.closeEnquiryDeleteModal = closeEnquiryDeleteModal;
+window.toggleEnquiryStatusDropdown = toggleEnquiryStatusDropdown;
+window.updateEnquiryStatus = updateEnquiryStatus;
 
-    if (diffInSeconds < 60) return 'Just now';
-    const diffInMinutes = Math.floor(diffInSeconds / 60);
-    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
-    const diffInHours = Math.floor(diffInMinutes / 60);
-    if (diffInHours < 24) return `${diffInHours}h ago`;
-    const diffInDays = Math.floor(diffInHours / 24);
-    if (diffInDays < 30) return `${diffInDays}d ago`;
-
-    // Fallback to simple date for older items
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
 
 // == GLOBAL ESCAPE HANDLER (FIX Z-ORDER) ==
 document.addEventListener('keydown', function (event) {
