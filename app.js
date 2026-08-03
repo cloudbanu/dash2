@@ -2093,44 +2093,55 @@ function copyToClipboard(text, buttonElement) {
 
 // == USER AUTHENTICATION ==
 function loginUser(name, role) {
-    currentUser = name;
-    currentUserRole = role;
+    try {
+        currentUser = name;
+        currentUserRole = role;
 
-    localStorage.setItem('currentUser', name);
-    localStorage.setItem('currentUserRole', role);
+        localStorage.setItem('currentUser', name);
+        localStorage.setItem('currentUserRole', role);
 
-    document.getElementById('loginScreen').classList.add('hidden');
-    document.getElementById('mainApp').classList.remove('hidden');
-    document.getElementById('userName').textContent = name;
-    document.getElementById('profileUserName').textContent = name;
-    
-    const userAvatarImg = document.getElementById('userAvatar');
-    if (userAvatarImg) {
-        userAvatarImg.src = memberAvatars[name];
-        userAvatarImg.style.display = '';
-        if (userAvatarImg.nextElementSibling) {
-            userAvatarImg.nextElementSibling.style.display = 'none';
+        const loginScreen = document.getElementById('loginScreen');
+        if (loginScreen) loginScreen.classList.add('hidden');
+
+        const mainApp = document.getElementById('mainApp');
+        if (mainApp) mainApp.classList.remove('hidden');
+
+        const userNameEl = document.getElementById('userName');
+        if (userNameEl) userNameEl.textContent = name;
+
+        const profileUserNameEl = document.getElementById('profileUserName');
+        if (profileUserNameEl) profileUserNameEl.textContent = name;
+        
+        const userAvatarImg = document.getElementById('userAvatar');
+        if (userAvatarImg) {
+            userAvatarImg.src = memberAvatars[name] || 'default-avatar.jpg';
+            userAvatarImg.style.display = '';
+            if (userAvatarImg.nextElementSibling) {
+                userAvatarImg.nextElementSibling.style.display = 'none';
+            }
         }
+        const fallbackElem = document.getElementById('userAvatarFallback');
+        if (fallbackElem) fallbackElem.textContent = name ? name[0].toUpperCase() : 'U';
+
+        // Sequential load — avoids network race on login
+        if (typeof refreshCategories === 'function') refreshCategories();
+        if (typeof refreshWorks === 'function') refreshWorks();
+        if (typeof refreshEnquiries === 'function') refreshEnquiries();
+
+        if (typeof setupMemberFilters === 'function') setupMemberFilters();
+        if (typeof subscribeToWorks === 'function') subscribeToWorks();
+        if (typeof subscribeToNotifications === 'function') subscribeToNotifications();
+        if (typeof subscribeToEnquiries === 'function') subscribeToEnquiries();
+
+        if (typeof renderWorks === 'function') renderWorks();
+        if (typeof updateStats === 'function') updateStats();
+        if (typeof updateMemberTiles === 'function') updateMemberTiles();
+        if (typeof showTab === 'function') showTab('dashboard');
+
+        if (typeof showNotification === 'function') showNotification(`Welcome back, ${name}!`, 'success');
+    } catch (err) {
+        console.error('Error during login:', err);
     }
-    const fallbackElem = document.getElementById('userAvatarFallback');
-    if (fallbackElem) fallbackElem.textContent = name[0].toUpperCase();
-
-    // Sequential load — avoids network race on login
-    refreshCategories();
-    refreshWorks();
-    refreshEnquiries();
-
-    setupMemberFilters();
-    subscribeToWorks();
-    subscribeToNotifications();
-    subscribeToEnquiries();
-
-    renderWorks();
-    updateStats();
-    updateMemberTiles();
-    showTab('dashboard');
-
-    showNotification(`Welcome back, ${name}!`, 'success');
 }
 
 function executeLogout() {
@@ -3233,11 +3244,23 @@ function resetForm() {
         form.reset();
     }
 
-    document.getElementById('categoryText').textContent = 'Select Category';
-    document.getElementById('priorityText').textContent = 'Medium';
+    const categoryText = document.getElementById('categoryText');
+    if (categoryText) categoryText.textContent = 'Select Category';
 
-    document.getElementById('workCategory').value = '';
-    document.getElementById('assignStaff').value = '';
+    const priorityText = document.getElementById('priorityText');
+    if (priorityText) priorityText.textContent = 'Medium';
+
+    const categoryInput = document.getElementById('categoryInput');
+    if (categoryInput) {
+        categoryInput.value = '';
+        filterCategories('');
+    }
+
+    const workCategory = document.getElementById('workCategory');
+    if (workCategory) workCategory.value = '';
+
+    const assignStaff = document.getElementById('assignStaff');
+    if (assignStaff) assignStaff.value = '';
 
     // Reset Staff Selection
     const staffContainer = document.getElementById('assignStaffContainer');
@@ -3259,13 +3282,8 @@ function resetForm() {
         });
     }
 
-    document.getElementById('workPriority').value = 'Medium';
-
-    const categoryInput = document.getElementById('categoryInput');
-    if (categoryInput) {
-        categoryInput.value = '';
-        filterCategories('');
-    }
+    const priorityEl = document.getElementById('workPriority');
+    if (priorityEl) priorityEl.value = 'Medium';
 
     document.getElementById('workDeadline').value = '';
     updateDateButtons('', 'workDateButtons');
