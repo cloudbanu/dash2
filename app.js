@@ -579,6 +579,21 @@ async function handleEnquirySubmit(event) {
 // == UPDATED: REAL-TIME SEARCH FUNCTIONALITY WITH DEBOUNCE ==
 function handleRealtimeSearch(searchTerm) {
     const clearBtn = document.getElementById('searchClearBtn');
+    const searchInput = document.getElementById('workSearchInput');
+    const searchIcon = document.getElementById('workSearchIcon');
+
+    // Retain active input styling whenever text exists in the search bar
+    if (searchInput) {
+        if (searchTerm.trim()) {
+            searchInput.classList.add('bg-white', 'border-indigo-500', 'ring-4', 'ring-indigo-500/10');
+            searchInput.classList.remove('bg-gray-100', 'border-gray-200');
+            if (searchIcon) searchIcon.classList.add('text-indigo-600');
+        } else {
+            searchInput.classList.remove('bg-white', 'border-indigo-500', 'ring-4', 'ring-indigo-500/10');
+            searchInput.classList.add('bg-gray-100', 'border-gray-200');
+            if (searchIcon) searchIcon.classList.remove('text-indigo-600');
+        }
+    }
 
     // Immediate UI feedback for clear button
     if (clearBtn) {
@@ -618,19 +633,26 @@ function toggleDeepSearch() {
 
 function clearSearch() {
     const searchInput = document.getElementById('workSearchInput');
+    const searchIcon = document.getElementById('workSearchIcon');
     const clearBtn = document.getElementById('searchClearBtn');
 
     if (searchInput) {
         searchInput.value = '';
-        currentSearchTerm = '';
-        // Keep deepSearchActive - only reset in clearAllFilters
+        searchInput.classList.remove('bg-white', 'border-indigo-500', 'ring-4', 'ring-indigo-500/10');
+        searchInput.classList.add('bg-gray-100', 'border-gray-200');
     }
+    if (searchIcon) {
+        searchIcon.classList.remove('text-indigo-600');
+    }
+
+    currentSearchTerm = '';
 
     if (clearBtn) {
         clearBtn.classList.add('hidden');
     }
 
     renderWorks();
+    updateMemberTiles();
 }
 
 // == PROFILE DROPDOWN ==
@@ -1865,7 +1887,7 @@ function updateMemberTiles() {
 
     let contextWorks = baseWorks;
 
-    // Apply Search
+    // Apply Search to contextWorks
     if (currentSearchTerm) {
         const termNoSpace = currentSearchTerm.replace(/\s+/g, '');
         contextWorks = baseWorks.filter(work => {
@@ -1881,10 +1903,7 @@ function updateMemberTiles() {
         });
     }
 
-    // Apply other filters (Status, Category, Creator)
-    if (currentFilters.status !== 'all' && currentWorkViewMode === 'active') {
-        contextWorks = contextWorks.filter(w => w.status === currentFilters.status);
-    }
+    // Apply Category & Creator filters
     if (currentFilters.category !== 'all') {
         contextWorks = contextWorks.filter(w => w.category === currentFilters.category);
     }
@@ -1892,7 +1911,7 @@ function updateMemberTiles() {
         contextWorks = contextWorks.filter(w => w.created_by === currentFilters.creator);
     }
 
-    // Calculate final counts
+    // Calculate final counts for each staff member tile
     const counts = {
         all: contextWorks.length,
         Irshad: contextWorks.filter(w => w.assigned_staff === 'Irshad').length,
@@ -2278,13 +2297,23 @@ async function refreshWorks(retries = 3) {
 }
 
 // == UPDATED: FILTER WORKS WITH PERFORMANCE OPTIMIZATION ==
-let foundHiddenMatchesCount = 0; // State for UI button
+let foundHiddenMatchesCount = 0;
 
 function filterWorks() {
     let filteredWorks = [...works];
-    foundHiddenMatchesCount = 0;
 
-    // Apply search filter first
+    // Handle view mode filter first
+    if (currentWorkViewMode === 'active') {
+        filteredWorks = filteredWorks.filter(work => work.status !== 'Completed' && work.status !== 'Unpaid');
+    } else if (currentWorkViewMode === 'unpaid') {
+        filteredWorks = filteredWorks.filter(work => work.status === 'Unpaid');
+    } else if (currentWorkViewMode === 'completed') {
+        filteredWorks = filteredWorks.filter(work => work.status === 'Completed');
+    } else if (currentWorkViewMode === 'all') {
+        // Show all works across all statuses
+    }
+
+    // Apply search filter
     if (currentSearchTerm) {
         const termNoSpace = currentSearchTerm.replace(/\s+/g, '');
 
@@ -2301,58 +2330,15 @@ function filterWorks() {
         });
     }
 
-    // Handle different view modes
-    if (showUnpaidWorks) {
-        filteredWorks = filteredWorks.filter(work => work.status === 'Unpaid');
-    } else if (showCompletedWorks) {
-        filteredWorks = filteredWorks.filter(work => work.status === 'Completed');
-    } else {
-        // Main view logic
-        if (currentSearchTerm && !deepSearchActive) {
-            // Check status of ALL matches to see if some are in history
-            const activeMatches = [];
-
-            filteredWorks.forEach(work => {
-                const isHistory = work.status === 'Completed' || work.status === 'Unpaid';
-                if (isHistory) {
-                    foundHiddenMatchesCount++;
-                } else {
-                    activeMatches.push(work);
-                }
-            });
-
-            filteredWorks = activeMatches;
-        } else if (!currentSearchTerm) {
-            // Default active view: Exclude history
-            filteredWorks = filteredWorks.filter(work =>
-                work.status !== 'Completed' && work.status !== 'Unpaid'
-            );
-        }
-        // If deepSearchActive, we keep everything that matched the term above
-    }
-
+    // Member filter (staff tiles)
     if (currentFilters.member !== 'all') {
-        filteredWorks = filteredWorks.filter(work =>
-            work.assigned_staff === currentFilters.member
-        );
+        filteredWorks = filteredWorks.filter(work => work.assigned_staff === currentFilters.member);
     }
-
-    if (currentFilters.status !== 'all') {
-        filteredWorks = filteredWorks.filter(work =>
-            work.status === currentFilters.status
-        );
-    }
-
     if (currentFilters.category !== 'all') {
-        filteredWorks = filteredWorks.filter(work =>
-            work.category === currentFilters.category
-        );
+        filteredWorks = filteredWorks.filter(work => work.category === currentFilters.category);
     }
-
     if (currentFilters.creator !== 'all') {
-        filteredWorks = filteredWorks.filter(work =>
-            work.created_by === currentFilters.creator
-        );
+        filteredWorks = filteredWorks.filter(work => work.created_by === currentFilters.creator);
     }
 
     if (currentFilters.deadline !== 'all') {
@@ -2360,17 +2346,19 @@ function filterWorks() {
         today.setHours(0, 0, 0, 0);
 
         filteredWorks = filteredWorks.filter(work => {
-            if (!work.deadline) return currentFilters.deadline === 'all';
+            if (!work.deadline) return false;
 
             const workDeadline = new Date(work.deadline);
             workDeadline.setHours(0, 0, 0, 0);
 
-            switch (currentFilters.deadline) {
-                case 'today':
-                    return workDeadline.getTime() === today.getTime();
-                default:
-                    return true;
+            if (currentFilters.deadline === 'today') {
+                return workDeadline.getTime() === today.getTime();
+            } else if (currentFilters.deadline === 'overdue') {
+                return workDeadline.getTime() < today.getTime();
+            } else if (currentFilters.deadline === 'upcoming') {
+                return workDeadline.getTime() > today.getTime();
             }
+            return true;
         });
     }
 
