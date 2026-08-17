@@ -34,6 +34,7 @@ let currentWorkId = null;
 let currentCreatorFilter = 'all';
 let deleteWorkId = null;
 let deleteEnquiryId = null;
+let convertingEnquiryId = null;
 let statusUpdateInProgress = new Set();
 let showUnpaidWorks = false; // UPDATED: New state for unpaid works
 let showCompletedWorks = false;
@@ -412,17 +413,23 @@ async function convertEnquiryToWork(enquiryId) {
     const enquiry = enquiries.find(e => e.id === enquiryId);
     if (!enquiry) return;
 
+    convertingEnquiryId = enquiryId;
+
     // Show Add Work Tab
     showTab('add');
 
-    // Pre-fill fields
-    document.getElementById('workName').value = `Enquiry: ${enquiry.customer_name}`;
+    // Pre-fill fields with clean customer name
+    document.getElementById('workName').value = enquiry.customer_name || '';
     document.getElementById('whatsappNumber').value = enquiry.whatsapp_number || '';
     document.getElementById('workDescription').value = enquiry.description || '';
 
     // Set Assigned Staff if any
     if (enquiry.assigned_staff) {
-        window.selectStaffOption(enquiry.assigned_staff, 'assignStaffContainer', 'assignStaff');
+        if (typeof window.selectStaffOption === 'function') {
+            window.selectStaffOption(enquiry.assigned_staff, 'assignStaffContainer', 'assignStaff');
+        } else if (typeof selectStaffOption === 'function') {
+            selectStaffOption(enquiry.assigned_staff, 'assignStaffContainer', 'assignStaff');
+        }
     }
 
     showNotification('Converted enquiry details. Review and save!', 'info');
@@ -518,11 +525,11 @@ async function handleEditEnquirySubmit(event) {
         if (error) throw error;
 
         closeEditEnquiryModal();
-        showNotification('Enquiry updated successfully! ✨', 'success');
+        showNotification('Enquiry updated successfully!', 'success');
         refreshEnquiries();
     } catch (error) {
         console.error('Error updating enquiry:', error);
-        showNotification('Failed to update enquiry: ' + (error.message || error), 'error');
+        showNotification('Failed to update enquiry', 'error');
     }
 }
 
@@ -568,7 +575,7 @@ async function handleEnquirySubmit(event) {
         if (error) throw error;
 
         closeAddEnquiryModal();
-        showNotification('New enquiry added! 🚀', 'success');
+        showNotification('New enquiry added!', 'success');
         refreshEnquiries();
     } catch (error) {
         console.error('Error adding enquiry:', error);
@@ -1035,12 +1042,18 @@ function setupKeyboardEventListeners() {
 }
 
 // == MODAL CLOSE HANDLERS ==
+function unlockBodyScroll() {
+    document.body.classList.remove('overflow-hidden');
+    document.body.style.top = '';
+    document.body.style.position = '';
+    document.body.style.width = '';
+    document.body.style.overflow = '';
+}
+
 function closeWorkDetailsModal(event) {
-    // Prevent closing if we are dragging selection out of the modal
     if (event && event.type === 'click' && modalMousedownTarget !== event.currentTarget) return;
     if (event && event.target !== event.currentTarget) return;
 
-    // Clear any text selection when clicking the backdrop
     if (window.getSelection) {
         window.getSelection().removeAllRanges();
     }
@@ -1048,23 +1061,18 @@ function closeWorkDetailsModal(event) {
     const modal = document.getElementById('workDetailsModal');
     if (modal) {
         modal.classList.add('hidden');
-
-        // Restore scroll position
-        const scrollY = document.body.style.top;
-        document.body.classList.remove('overflow-hidden');
-        document.body.style.top = '';
-        if (scrollY) {
-            window.scrollTo(0, parseInt(scrollY || '0') * -1);
-        }
     }
+    unlockBodyScroll();
+}
+
+function closeDetailsModal(event) {
+    closeWorkDetailsModal(event);
 }
 
 function closeEditModal(event) {
-    // Prevent closing if we are dragging selection out of the modal
     if (event && event.type === 'click' && modalMousedownTarget !== event.currentTarget) return;
     if (event && event.target !== event.currentTarget) return;
 
-    // Clear any text selection when clicking the backdrop
     if (window.getSelection) {
         window.getSelection().removeAllRanges();
     }
@@ -1072,18 +1080,11 @@ function closeEditModal(event) {
     const modal = document.getElementById('editWorkModal');
     if (modal) {
         modal.classList.add('hidden');
-
-        // Restore scroll position
-        const scrollY = document.body.style.top;
-        document.body.classList.remove('overflow-hidden');
-        document.body.style.top = '';
-        if (scrollY) {
-            window.scrollTo(0, parseInt(scrollY || '0') * -1);
-        }
     }
     editingWorkId = null;
     editUploadedImages = [];
     currentWorkImages = [];
+    unlockBodyScroll();
 }
 
 function closeAddCategoryModal(event) {
@@ -1445,28 +1446,28 @@ function setupFormHandlers() {
             const originalBtnText = submitBtn.innerHTML;
 
             const assignedStaff = document.getElementById('assignStaff').value;
-            const category = document.getElementById('workCategory').value;
+            const categoryInputVal = (document.getElementById('categoryInput')?.value || '').trim();
+            const workCategoryVal = (document.getElementById('workCategory')?.value || '').trim();
+            const rawCategory = categoryInputVal || workCategoryVal;
 
             if (!assignedStaff) {
-                showNotification('❌ Please select a staff member', 'error');
+                showNotification('Please select a staff member', 'error');
                 return;
             }
 
-            if (!category) {
-                showNotification('❌ Please select a category', 'error');
+            if (!rawCategory) {
+                showNotification('Please select a category', 'error');
                 return;
             }
 
-            // Disable button and show loading state
-            submitBtn.disabled = true;
-            submitBtn.classList.add('opacity-70', 'cursor-not-allowed');
-            submitBtn.innerHTML = `
-                <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Adding...
-            `;
+            // Require category to exist in database (+ Add Category button must be used to create new categories)
+            const matchedCategory = categories.find(cat => (cat.name || '').toLowerCase() === rawCategory.toLowerCase());
+            if (!matchedCategory) {
+                showNotification('Category not found! Click "+ Add Category"', 'error');
+                return;
+            }
+
+            const category = matchedCategory.name;
 
             const workData = {
                 work_name: document.getElementById('workName').value,
@@ -1492,12 +1493,23 @@ function setupFormHandlers() {
 
                 if (error) throw error;
 
+                // Delete converted enquiry from enquiries table upon successful work creation
+                if (convertingEnquiryId) {
+                    try {
+                        await sb.from('enquiries').delete().eq('id', convertingEnquiryId);
+                        convertingEnquiryId = null;
+                        await refreshEnquiries();
+                    } catch (eErr) {
+                        console.error('Error removing converted enquiry:', eErr);
+                    }
+                }
+
                 resetForm();
                 uploadedImages = [];
                 updateImagePreview();
                 await refreshWorks();
                 showTab('works');
-                showNotification('✅ Work added successfully!', 'success');
+                showNotification('Work added successfully!', 'success');
 
                 if (assignedStaff !== currentUser) {
                     await createNotification(
@@ -1513,7 +1525,7 @@ function setupFormHandlers() {
 
             } catch (error) {
                 console.error('Error adding work:', error);
-                showNotification('❌ Failed to add work', 'error');
+                showNotification('Failed to add work', 'error');
             } finally {
                 // Restore button state
                 submitBtn.disabled = false;
@@ -1531,7 +1543,7 @@ function setupFormHandlers() {
             const categoryName = document.getElementById('newCategoryName').value.trim();
 
             if (!categoryName) {
-                showNotification('❌ Please enter a category name', 'error');
+                showNotification('Please enter a category name', 'error');
                 return;
             }
 
@@ -1540,7 +1552,7 @@ function setupFormHandlers() {
             );
 
             if (existingCategory) {
-                showNotification('❌ Category already exists', 'error');
+                showNotification('Category already exists', 'error');
                 return;
             }
 
@@ -1560,11 +1572,11 @@ function setupFormHandlers() {
 
                 document.getElementById('addCategoryModal').classList.add('hidden');
                 document.getElementById('addCategoryForm').reset();
-                showNotification('✅ Category added successfully!', 'success');
+                showNotification('Category added successfully!', 'success');
 
             } catch (error) {
                 console.error('Error adding category:', error);
-                showNotification('❌ Failed to add category', 'error');
+                showNotification('Failed to add category', 'error');
             }
         });
     }
@@ -1578,11 +1590,28 @@ function setupFormHandlers() {
 
             if (!editingWorkId) return;
 
+            const editCategoryInputVal = (document.getElementById('editCategoryInput')?.value || '').trim();
+            const editWorkCategoryVal = (document.getElementById('editWorkCategory')?.value || '').trim();
+            const rawCategory = editCategoryInputVal || editWorkCategoryVal;
+
+            if (!rawCategory) {
+                showNotification('Please select a category', 'error');
+                return;
+            }
+
+            const matchedCategory = categories.find(cat => (cat.name || '').toLowerCase() === rawCategory.toLowerCase());
+            if (!matchedCategory) {
+                showNotification('Category not found! Click "+ Add Category"', 'error');
+                return;
+            }
+
+            const category = matchedCategory.name;
+
             const allImages = [...(currentWorkImages || []), ...editUploadedImages.map(img => img.url)];
 
             const updatedWork = {
                 work_name: document.getElementById('editWorkName').value,
-                category: document.getElementById('editWorkCategory').value,
+                category: category,
                 whatsapp_number: document.getElementById('editWhatsappNumber').value,
                 description: document.getElementById('editWorkDescription').value,
                 assigned_staff: document.getElementById('editAssignStaff').value,
@@ -1618,13 +1647,14 @@ function setupFormHandlers() {
                 editingWorkId = null;
                 editUploadedImages = [];
                 currentWorkImages = [];
+                unlockBodyScroll();
 
                 await refreshWorks();
                 showNotification('Work updated successfully!', 'success');
 
             } catch (error) {
                 console.error('Error updating work:', error);
-                showNotification('Failed to update work', 'error');
+                showNotification('❌ Failed to update work', 'error');
             }
         });
     }
@@ -2960,10 +2990,6 @@ function showWorkDetails(workId) {
     if (modalContent) {
         modalContent.innerHTML = content;
         document.getElementById('workDetailsModal').classList.remove('hidden');
-
-        // Preserve scroll position when modal opens
-        const scrollY = window.scrollY;
-        document.body.style.top = `-${scrollY}px`;
         document.body.classList.add('overflow-hidden');
     }
 }
@@ -3001,7 +3027,6 @@ function editWork(workId) {
     }
 
     document.getElementById('editWorkStatus').value = work.status || 'Pending';
-    document.getElementById('editWorkStatus').value = work.status || 'Pending';
     const deadlineDate = work.deadline || '';
     document.getElementById('editWorkDeadline').value = deadlineDate;
     if (typeof window.updateDateButtons === 'function') {
@@ -3012,7 +3037,6 @@ function editWork(workId) {
 
     document.getElementById('editWorkDeadlineTime').value = work.deadline_time || '';
     if (typeof window.selectTimeOption === 'function') {
-        // Ensure visual state matches the value, use 'true' to force selection without toggling
         window.selectTimeOption(work.deadline_time || '', 'editWorkDeadlineTimeContainer', true);
     } else if (typeof selectTimeOption === 'function') {
         selectTimeOption(work.deadline_time || '', 'editWorkDeadlineTimeContainer', true);
@@ -3021,10 +3045,6 @@ function editWork(workId) {
 
     updateEditImagePreview();
     document.getElementById('editWorkModal').classList.remove('hidden');
-
-    // Preserve scroll position when modal opens
-    const scrollY = window.scrollY;
-    document.body.style.top = `-${scrollY}px`;
     document.body.classList.add('overflow-hidden');
 }
 
@@ -3037,7 +3057,10 @@ async function executeDeleteWork(workId) {
 
         if (error) throw error;
 
-        if (error) throw error;
+        const detailsModal = document.getElementById('workDetailsModal');
+        if (detailsModal) detailsModal.classList.add('hidden');
+
+        unlockBodyScroll();
 
         await refreshWorks();
         showNotification('Work deleted successfully!', 'success');
@@ -3045,6 +3068,7 @@ async function executeDeleteWork(workId) {
     } catch (error) {
         console.error('Error deleting work:', error);
         showNotification('Failed to delete work', 'error');
+        unlockBodyScroll();
     }
 }
 
@@ -3227,6 +3251,7 @@ function updateRecentActivity() {
 }
 
 function resetForm() {
+    convertingEnquiryId = null;
     const form = document.getElementById('workForm');
     if (form) {
         form.reset();
@@ -3706,5 +3731,6 @@ document.addEventListener('keydown', function (event) {
             event.stopImmediatePropagation();
             event.preventDefault();
         }
+        unlockBodyScroll();
     }
 }, true); // Capture Phase: True

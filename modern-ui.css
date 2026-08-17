@@ -10,9 +10,7 @@ html {
 
 /* Prevent background scrolling when modals are open */
 body.overflow-hidden {
-    position: fixed;
-    width: 100%;
-    overflow: hidden;
+    overflow: hidden !important;
 }
 
 /* Allow selection in inputs and textareas */
