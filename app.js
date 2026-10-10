@@ -138,6 +138,17 @@ document.addEventListener('DOMContentLoaded', async function () {
         } catch(e) {}
     }
 
+    const cachedStaffList = localStorage.getItem('staffListCache');
+    if (cachedStaffList) {
+        try {
+            staffList = getSortedStaffList(JSON.parse(cachedStaffList));
+        } catch(e) {}
+    }
+
+    // Immediately render login profiles and member tiles from cache on startup
+    renderLoginProfiles();
+    renderMemberTiles();
+
     if (savedUser && savedRole) {
         currentUser = savedUser;
         currentUserRole = savedRole;
@@ -3865,6 +3876,7 @@ async function refreshStaffList() {
         });
         try {
             localStorage.setItem('memberAvatarsCache', JSON.stringify(memberAvatars));
+            localStorage.setItem('staffListCache', JSON.stringify(staffList));
         } catch(e) {}
         updateHeaderUserProfile();
 
