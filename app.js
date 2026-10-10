@@ -29,6 +29,7 @@ let dueTodayWorksCount = 0;
 let works = [];
 let isWorksLoaded = false;
 let categories = [];
+let staffList = [];
 let enquiries = [];
 let currentWorkId = null;
 let currentCreatorFilter = 'all';
@@ -130,32 +131,29 @@ document.addEventListener('DOMContentLoaded', async function () {
     const savedUser = localStorage.getItem('currentUser');
     const savedRole = localStorage.getItem('currentUserRole');
 
+    const cachedAvatars = localStorage.getItem('memberAvatarsCache');
+    if (cachedAvatars) {
+        try {
+            Object.assign(memberAvatars, JSON.parse(cachedAvatars));
+        } catch(e) {}
+    }
+
     if (savedUser && savedRole) {
         currentUser = savedUser;
         currentUserRole = savedRole;
         document.getElementById('loginScreen').classList.add('hidden');
         document.getElementById('mainApp').classList.remove('hidden');
-        document.getElementById('userName').textContent = savedUser;
-        document.getElementById('profileUserName').textContent = savedUser;
-        
-        const userAvatarImg = document.getElementById('userAvatar');
-        if (userAvatarImg) {
-            userAvatarImg.src = memberAvatars[savedUser];
-            userAvatarImg.style.display = '';
-            if (userAvatarImg.nextElementSibling) {
-                userAvatarImg.nextElementSibling.style.display = 'none';
-            }
-        }
-        const fallbackElem = document.getElementById('userAvatarFallback');
-        if (fallbackElem) fallbackElem.textContent = savedUser[0].toUpperCase();
+        updateHeaderUserProfile();
 
         // Show app UI and active tab immediately so user isn't stuck waiting
-        showTab('dashboard');
+        const savedTab = localStorage.getItem('activeTab') || 'dashboard';
+        showTab(savedTab);
         renderWorks();
         updateStats();
 
         // Fetch background data
         refreshCategories();
+        refreshStaffList();
         refreshWorks();
         refreshEnquiries();
 
@@ -1446,6 +1444,8 @@ function setupFormHandlers() {
             const originalBtnText = submitBtn.innerHTML;
 
             const assignedStaff = document.getElementById('assignStaff').value;
+            const matchedStaff = staffList.find(s => s.name === assignedStaff);
+            const matchedCreator = staffList.find(s => s.name === currentUser);
             const categoryInputVal = (document.getElementById('categoryInput')?.value || '').trim();
             const workCategoryVal = (document.getElementById('workCategory')?.value || '').trim();
             const rawCategory = categoryInputVal || workCategoryVal;
@@ -1477,11 +1477,13 @@ function setupFormHandlers() {
                 mrp: parseFloat(document.getElementById('workMrp').value) || null,
                 quotation_rate: parseFloat(document.getElementById('workQuotationRate').value) || null,
                 assigned_staff: assignedStaff,
+                assigned_staff_id: matchedStaff ? matchedStaff.id : null,
                 deadline: document.getElementById('workDeadline').value || null,
                 deadline_time: document.getElementById('workDeadlineTime').value || null,
                 priority: document.getElementById('workPriority').value,
                 status: 'Pending',
                 created_by: currentUser,
+                created_by_staff_id: matchedCreator ? matchedCreator.id : null,
                 images: uploadedImages.map(img => img.url)
             };
 
@@ -2158,19 +2160,7 @@ function loginUser(name, role) {
         const userNameEl = document.getElementById('userName');
         if (userNameEl) userNameEl.textContent = name;
 
-        const profileUserNameEl = document.getElementById('profileUserName');
-        if (profileUserNameEl) profileUserNameEl.textContent = name;
-        
-        const userAvatarImg = document.getElementById('userAvatar');
-        if (userAvatarImg) {
-            userAvatarImg.src = memberAvatars[name] || 'default-avatar.jpg';
-            userAvatarImg.style.display = '';
-            if (userAvatarImg.nextElementSibling) {
-                userAvatarImg.nextElementSibling.style.display = 'none';
-            }
-        }
-        const fallbackElem = document.getElementById('userAvatarFallback');
-        if (fallbackElem) fallbackElem.textContent = name ? name[0].toUpperCase() : 'U';
+        updateHeaderUserProfile();
 
         // Sequential load — avoids network race on login
         if (typeof refreshCategories === 'function') refreshCategories();
@@ -3312,6 +3302,9 @@ function resetForm() {
 }
 
 function showTab(tabName) {
+    if (tabName) {
+        localStorage.setItem('activeTab', tabName);
+    }
     if (tabName !== 'works') {
         currentSearchTerm = '';
         deepSearchActive = false;
@@ -3456,7 +3449,11 @@ function renderStaffSelection(containerId, inputId) {
     if (!container) return;
 
     container.innerHTML = '';
-    const staffMembers = ['Irshad', 'Niyas', 'Muhammed', 'Nihana', 'Safvan'];
+    const sortedStaff = getSortedStaffList(staffList);
+    const activeStaff = (sortedStaff && sortedStaff.length > 0) 
+        ? sortedStaff.filter(s => s.is_active !== false).map(s => s.name)
+        : ['Irshad', 'Niyas', 'Muhammed', 'Noora', 'Nihana', 'Najil', 'Safvan'];
+    const staffMembers = activeStaff;
 
     staffMembers.forEach(name => {
         const avatar = memberAvatars[name] || 'default-avatar.jpg';
@@ -3734,3 +3731,577 @@ document.addEventListener('keydown', function (event) {
         unlockBodyScroll();
     }
 }, true); // Capture Phase: True
+
+
+// ==========================================
+// == DYNAMIC STAFF MANAGEMENT SYSTEM ==
+// ==========================================
+
+function getSortedStaffList(list) {
+    if (!list) return [];
+    return [...list].sort((a, b) => {
+        const aActive = (a.is_active !== false) ? 0 : 1;
+        const bActive = (b.is_active !== false) ? 0 : 1;
+        if (aActive !== bActive) {
+            return aActive - bActive; // Active staff first (0), Deactivated last (1)
+        }
+        const aOrder = Number(a.sort_order || a.id || 0);
+        const bOrder = Number(b.sort_order || b.id || 0);
+        return aOrder - bOrder;
+    });
+}
+
+async function moveStaffOrder(id, direction) {
+    const sorted = getSortedStaffList(staffList);
+    const index = sorted.findIndex(s => s.id == id);
+    if (index === -1) return;
+
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+
+    if (targetIndex < 0 || targetIndex >= sorted.length) return;
+    if ((sorted[index].is_active !== false) !== (sorted[targetIndex].is_active !== false)) return;
+
+    const currentStaff = sorted[index];
+    const targetStaff = sorted[targetIndex];
+
+    let currentOrder = Number(currentStaff.sort_order || currentStaff.id || 1);
+    let targetOrder = Number(targetStaff.sort_order || targetStaff.id || 1);
+
+    if (currentOrder === targetOrder) {
+        currentOrder = index + 1;
+        targetOrder = targetIndex + 1;
+    }
+
+    try {
+        await Promise.all([
+            sb.from('staff').update({ sort_order: targetOrder }).eq('id', parseInt(currentStaff.id, 10)),
+            sb.from('staff').update({ sort_order: currentOrder }).eq('id', parseInt(targetStaff.id, 10))
+        ]);
+
+        await refreshStaffList();
+    } catch (err) {
+        console.error('Error reordering staff:', err);
+        showNotification('Failed to reorder staff', 'error');
+    }
+}
+
+
+function updateHeaderUserProfile() {
+    if (!currentUser) return;
+    const userNameEl = document.getElementById('userName');
+    if (userNameEl) userNameEl.textContent = currentUser;
+
+    const profileUserNameEl = document.getElementById('profileUserName');
+    if (profileUserNameEl) profileUserNameEl.textContent = currentUser;
+
+    const userAvatarImg = document.getElementById('userAvatar');
+    const fallbackElem = document.getElementById('userAvatarFallback');
+
+    if (fallbackElem) fallbackElem.textContent = currentUser[0].toUpperCase();
+
+    const avatarUrl = memberAvatars[currentUser];
+    if (userAvatarImg && avatarUrl) {
+        userAvatarImg.src = avatarUrl;
+        userAvatarImg.style.display = '';
+        if (userAvatarImg.nextElementSibling) {
+            userAvatarImg.nextElementSibling.style.display = 'none';
+        }
+    }
+}
+window.updateHeaderUserProfile = updateHeaderUserProfile;
+
+let pendingStaffAvatarFile = null;
+let profileClickCount = 0;
+let profileClickTimer = null;
+
+function handleProfileIconClick() {
+    profileClickCount++;
+    if (profileClickTimer) clearTimeout(profileClickTimer);
+
+    profileClickTimer = setTimeout(() => {
+        profileClickCount = 0;
+    }, 2500);
+
+    if (profileClickCount >= 7) {
+        profileClickCount = 0;
+        if (currentUser === 'Irshad' || currentUserRole === 'Administrator') {
+            openStaffManagementModal();
+        }
+        return;
+    }
+
+    if (typeof toggleProfileDropdown === 'function') {
+        toggleProfileDropdown();
+    }
+}
+
+async function refreshStaffList() {
+    try {
+        const { data, error } = await sb
+            .from('staff')
+            .select('*')
+            .order('created_at', { ascending: true });
+
+        if (error) throw error;
+        if (data && data.length > 0) {
+            staffList = getSortedStaffList(data);
+        } else {
+            staffList = [
+                { id: '1', name: 'Irshad', role: 'Administrator', avatar: 'irshad.jpg', is_active: true },
+                { id: '2', name: 'Niyas', role: 'Staff', avatar: 'niyas.jpg', is_active: true },
+                { id: '3', name: 'Muhammed', role: 'Staff', avatar: 'muhammed.jpg', is_active: true },
+                { id: '4', name: 'Noora', role: 'Staff', avatar: 'noora.jpg', is_active: true },
+                { id: '5', name: 'Nihana', role: 'Staff', avatar: 'Nihana.jpg', is_active: true },
+                { id: '6', name: 'Najil', role: 'Staff', avatar: 'najil.jpg', is_active: true },
+                { id: '7', name: 'Safvan', role: 'Staff', avatar: 'safvan.jpg', is_active: true }
+            ];
+        }
+
+        // Update memberAvatars mapping dynamically
+        staffList.forEach(s => {
+            if (s.name && s.avatar) {
+                memberAvatars[s.name] = s.avatar;
+            }
+        });
+        try {
+            localStorage.setItem('memberAvatarsCache', JSON.stringify(memberAvatars));
+        } catch(e) {}
+        updateHeaderUserProfile();
+
+        renderLoginProfiles();
+        renderMemberTiles();
+        setupStaffSelection();
+        if (typeof updateMemberCounts === 'function') updateMemberCounts();
+
+        const modal = document.getElementById('staffManagementModal');
+        if (modal && !modal.classList.contains('hidden')) {
+            renderStaffManagementList();
+        }
+    } catch (err) {
+        console.error('Error fetching staff list:', err);
+    }
+}
+
+function renderLoginProfiles() {
+    const grid = document.getElementById('loginProfileGrid');
+    if (!grid || !staffList || staffList.length === 0) return;
+
+    const sortedStaff = getSortedStaffList(staffList);
+    const activeStaff = sortedStaff.filter(s => s.is_active !== false);
+    grid.innerHTML = activeStaff.map(staff => {
+        const avatar = staff.avatar || 'default-avatar.jpg';
+        const role = staff.role || 'Staff Member';
+        const isDbStaff = !!staff.id;
+        
+        return `
+            <button onclick="animateAndLogin(this, '${staff.name}', '${role}')"
+                class="w-full flex items-center gap-4 p-3 rounded-xl bg-white border border-gray-200 hover:border-indigo-500 hover:shadow-md transition-all duration-300 group">
+                <div class="relative">
+                    <img src="${avatar}" alt="${staff.name}"
+                        class="w-12 h-12 rounded-full object-cover ring-2 ring-gray-100 group-hover:ring-indigo-500 transition-all" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    <div class="hidden absolute inset-0 rounded-full bg-indigo-50 items-center justify-center ring-2 ring-gray-100 group-hover:ring-indigo-500 transition-all"><span class="text-sm font-bold text-indigo-600">${staff.name[0]}</span></div>
+                    ${role === 'Administrator' ? '<div class="absolute bottom-0 right-0 w-3 h-3 bg-emerald-400 rounded-full border-2 border-white z-10"></div>' : ''}
+                </div>
+                <div class="text-left flex-1">
+                    <div class="font-semibold text-gray-900 group-hover:text-indigo-600 transition-colors">${staff.name}</div>
+                    <div class="text-xs text-gray-500 group-hover:text-gray-700">${role}</div>
+                </div>
+                <svg class="w-5 h-5 text-gray-300 group-hover:text-indigo-500 transition-colors transform group-hover:translate-x-1"
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                </svg>
+            </button>
+        `;
+    }).join('');
+}
+
+function renderMemberTiles() {
+    const container = document.getElementById('memberTiles');
+    if (!container || !staffList || staffList.length === 0) return;
+
+    const sortedStaff = getSortedStaffList(staffList);
+    const activeStaff = sortedStaff.filter(s => s.is_active !== false);
+
+    let html = `
+        <div class="member-tile ${currentFilters.member === 'all' ? 'active' : ''}" onclick="selectMemberTile('all')">
+            <div class="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+                <svg class="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 0010 16a5.986 5.986 0 004.546-2.084A5 5 0 0010 11z" clip-rule="evenodd"></path>
+                </svg>
+            </div>
+            <div>
+                <div class="font-medium text-sm">All</div>
+                <div class="text-xs text-gray-500" id="allCount">0 works</div>
+            </div>
+        </div>
+    `;
+
+    activeStaff.forEach(s => {
+        const avatar = s.avatar || 'default-avatar.jpg';
+        const isSelected = currentFilters.member === s.name;
+        const countId = s.name.toLowerCase() + 'Count';
+
+        html += `
+            <div class="member-tile ${isSelected ? 'active' : ''}" onclick="selectMemberTile('${s.name}')">
+                <div class="relative w-10 h-10">
+                    <img src="${avatar}" alt="${s.name}" class="w-full h-full rounded-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    <div class="hidden absolute inset-0 rounded-full bg-indigo-50 items-center justify-center"><span class="text-xs font-bold text-indigo-600">${s.name[0]}</span></div>
+                </div>
+                <div>
+                    <div class="font-medium text-sm">${s.name}</div>
+                    <div class="text-xs text-gray-500" id="${countId}">0 works</div>
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
+function openStaffManagementModal() {
+    const modal = document.getElementById('staffManagementModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        hideStaffForm();
+        renderStaffManagementList();
+    }
+}
+
+function closeStaffManagementModal() {
+    const modal = document.getElementById('staffManagementModal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+}
+
+function showAddStaffForm() {
+    resetStaffForm();
+    const container = document.getElementById('staffFormContainer');
+    if (container) {
+        container.classList.remove('hidden');
+    }
+    const nameInput = document.getElementById('staffFormName');
+    if (nameInput) nameInput.focus();
+}
+
+function hideStaffForm() {
+    resetStaffForm();
+    const container = document.getElementById('staffFormContainer');
+    if (container) {
+        container.classList.add('hidden');
+    }
+}
+
+function resetStaffForm() {
+    pendingStaffAvatarFile = null;
+    const form = document.getElementById('staffForm');
+    if (form) form.reset();
+    document.getElementById('staffFormId').value = '';
+    document.getElementById('staffFormAvatarData').value = '';
+    
+    const preview = document.getElementById('staffFormAvatarPreview');
+    const fallback = document.getElementById('staffFormAvatarFallback');
+    if (preview) {
+        preview.src = '';
+        preview.style.display = 'none';
+    }
+    if (fallback) {
+        fallback.style.display = 'flex';
+    }
+
+    const titleSpan = document.getElementById('staffFormTitle')?.querySelector('span');
+    if (titleSpan) titleSpan.textContent = 'Add New Staff';
+    const saveBtn = document.getElementById('saveStaffBtn');
+    if (saveBtn) saveBtn.textContent = 'Save Staff';
+}
+
+function updateStaffAvatarPreview(src) {
+    const preview = document.getElementById('staffFormAvatarPreview');
+    const fallback = document.getElementById('staffFormAvatarFallback');
+    if (!src) {
+        if (preview) { preview.src = ''; preview.style.display = 'none'; }
+        if (fallback) fallback.style.display = 'flex';
+        return;
+    }
+
+    if (preview) {
+        preview.src = src;
+        preview.style.display = 'block';
+    }
+    if (fallback) {
+        fallback.style.display = 'none';
+    }
+}
+
+function handleStaffAvatarFileChange(e) {
+    const file = e.target.files[0];
+    if (file) {
+        pendingStaffAvatarFile = file;
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+            updateStaffAvatarPreview(evt.target.result);
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+async function saveStaffMember(e) {
+    e.preventDefault();
+    const id = document.getElementById('staffFormId').value;
+    const name = document.getElementById('staffFormName').value.trim();
+    const role = 'Staff';
+    let avatarData = document.getElementById('staffFormAvatarData').value || memberAvatars[name] || (name.toLowerCase() + '.jpg');
+
+    if (!name) {
+        showNotification('Please enter a staff name', 'error');
+        return;
+    }
+
+    const saveBtn = document.getElementById('saveStaffBtn');
+    const originalBtnText = saveBtn ? saveBtn.textContent : 'Save';
+
+    try {
+        if (pendingStaffAvatarFile) {
+            if (saveBtn) saveBtn.textContent = 'Uploading...';
+            try {
+                const fileExt = pendingStaffAvatarFile.name.split('.').pop();
+                const fileName = `avatar_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+                
+                const { data: uploadData, error: uploadErr } = await sb.storage
+                    .from('staff-avatars')
+                    .upload(fileName, pendingStaffAvatarFile, { cacheControl: '3600', upsert: true });
+
+                if (uploadErr) {
+                    console.error('Storage upload error:', uploadErr);
+                } else {
+                    const { data: urlData } = sb.storage
+                        .from('staff-avatars')
+                        .getPublicUrl(fileName);
+
+                    if (urlData && urlData.publicUrl) {
+                        avatarData = urlData.publicUrl;
+                    }
+                }
+            } catch (stErr) {
+                console.error('Error uploading avatar to bucket:', stErr);
+            }
+        }
+        if (id) {
+            const staffIdNum = parseInt(id, 10);
+            const oldStaff = staffList.find(s => s.id == id);
+
+            const { error } = await sb
+                .from('staff')
+                .update({ name, role, avatar: avatarData })
+                .eq('id', staffIdNum);
+            if (error) throw error;
+
+            // If name changed, sync works table records via assigned_staff_id / created_by_staff_id
+            if (oldStaff && oldStaff.name !== name) {
+                await sb.from('works').update({ assigned_staff: name }).eq('assigned_staff_id', staffIdNum);
+                await sb.from('works').update({ created_by: name }).eq('created_by_staff_id', staffIdNum);
+            }
+
+            showNotification('Staff member updated successfully!', 'success');
+        } else {
+            const existing = staffList.find(s => s.name.toLowerCase() === name.toLowerCase());
+            if (existing) {
+                showNotification(`Staff member "${name}" already exists!`, 'error');
+                return;
+            }
+
+            const { error } = await sb
+                .from('staff')
+                .insert([{ name, role, avatar: avatarData, is_active: true }]);
+            if (error) throw error;
+            showNotification('Staff member added successfully!', 'success');
+        }
+
+        resetStaffForm();
+        await refreshStaffList();
+        if (typeof refreshWorks === 'function') await refreshWorks();
+    } catch (err) {
+        console.error('Error saving staff:', err);
+        showNotification('Failed to save staff member', 'error');
+    }
+}
+
+function editStaffMember(id) {
+    const staff = staffList.find(s => s.id == id);
+    if (!staff) return;
+
+    const container = document.getElementById('staffFormContainer');
+    if (container) container.classList.remove('hidden');
+
+    document.getElementById('staffFormId').value = staff.id;
+    document.getElementById('staffFormName').value = staff.name;
+    // role field removed
+    document.getElementById('staffFormAvatarData').value = staff.avatar || '';
+    
+    updateStaffAvatarPreview(staff.avatar || '');
+
+    const titleSpan = document.getElementById('staffFormTitle')?.querySelector('span');
+    if (titleSpan) titleSpan.textContent = 'Edit Staff Member';
+    const saveBtn = document.getElementById('saveStaffBtn');
+    if (saveBtn) saveBtn.textContent = 'Update Staff';
+
+    const nameInput = document.getElementById('staffFormName');
+    if (nameInput) nameInput.focus();
+}
+
+async function toggleStaffActive(id) {
+    const staff = staffList.find(s => s.id == id);
+    if (!staff) return;
+
+    const newStatus = !(staff.is_active !== false);
+    try {
+        const { error } = await sb
+            .from('staff')
+            .update({ is_active: newStatus })
+            .eq('id', parseInt(id, 10));
+        if (error) throw error;
+
+        showNotification(`Staff "${staff.name}" ${newStatus ? 'activated' : 'deactivated'}`, 'info');
+        await refreshStaffList();
+    } catch (err) {
+        console.error('Error toggling staff status:', err);
+        showNotification('Failed to update status', 'error');
+    }
+}
+
+async function deleteStaffMember(id, name) {
+    const assignedWorks = works.filter(w => w.assigned_staff === name || w.created_by === name);
+    if (assignedWorks.length > 0) {
+        showNotification(`❌ Cannot delete "${name}" because ${assignedWorks.length} work(s) are associated with them. Please deactivate instead!`, 'error', 5000);
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to delete staff member "${name}"?`)) return;
+
+    try {
+        const { error } = await sb
+            .from('staff')
+            .delete()
+            .eq('id', parseInt(id, 10));
+        if (error) throw error;
+
+        showNotification(`Staff member "${name}" deleted!`, 'success');
+        await refreshStaffList();
+    } catch (err) {
+        console.error('Error deleting staff:', err);
+        showNotification('Failed to delete staff member', 'error');
+    }
+}
+
+function renderStaffManagementList() {
+    const container = document.getElementById('staffListContainer');
+    if (!container) return;
+
+    const sortedList = getSortedStaffList(staffList);
+
+    if (!sortedList || sortedList.length === 0) {
+        container.innerHTML = '<div class="p-6 text-center text-xs font-semibold text-gray-400">No staff members found.</div>';
+        return;
+    }
+
+    const activeList = sortedList.filter(s => s.is_active !== false);
+    const deactiveList = sortedList.filter(s => s.is_active === false);
+
+    const activeBadge = document.getElementById('activeStaffCountBadge');
+    if (activeBadge) activeBadge.textContent = `${activeList.length} Active`;
+
+    function renderItem(s, index, subList) {
+        const workCount = works.filter(w => w.assigned_staff === s.name || w.created_by === s.name).length;
+        const isActive = s.is_active !== false;
+
+        const canMoveUp = index > 0;
+        const canMoveDown = index < subList.length - 1;
+
+        return `
+            <div class="flex items-center justify-between p-3.5 ${isActive ? 'bg-white border-gray-100 hover:border-indigo-200 shadow-2xs hover:shadow-md' : 'bg-gray-50/70 border-gray-200/60 opacity-70 hover:opacity-100 hover:bg-white'} border rounded-2xl transition-all duration-200 group mb-2.5">
+                <div class="flex items-center gap-3">
+                    <div class="flex flex-col items-center justify-center gap-0.5">
+                        <button onclick="moveStaffOrder('${s.id}', 'up')" title="Move Up" ${!canMoveUp ? 'disabled' : ''} class="w-5 h-5 flex items-center justify-center rounded-md text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-15 disabled:cursor-not-allowed transition-all">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 15l7-7 7 7"></path></svg>
+                        </button>
+                        <button onclick="moveStaffOrder('${s.id}', 'down')" title="Move Down" ${!canMoveDown ? 'disabled' : ''} class="w-5 h-5 flex items-center justify-center rounded-md text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-15 disabled:cursor-not-allowed transition-all">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 9l-7 7-7-7"></path></svg>
+                        </button>
+                    </div>
+                    <div class="relative w-11 h-11">
+                        <img src="${s.avatar || 'default-avatar.jpg'}" alt="${s.name}" class="w-11 h-11 rounded-full object-cover ring-2 ring-gray-100 group-hover:ring-indigo-200 transition-all shadow-sm" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                        <div class="hidden absolute inset-0 rounded-full bg-indigo-50 items-center justify-center ring-2 ring-gray-100"><span class="text-xs font-bold text-indigo-600">${s.name[0]}</span></div>
+                        ${isActive ? '<div class="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full ring-2 ring-white"></div>' : ''}
+                    </div>
+                    <div>
+                        <div class="font-extrabold text-gray-800 text-sm group-hover:text-indigo-600 transition-colors flex items-center gap-1.5">
+                            <span>${s.name}</span>
+                            ${s.role === 'Administrator' ? '<span class="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[9px] font-bold rounded-full">Admin</span>' : ''}
+                        </div>
+                        <div class="text-[11px] font-medium text-gray-400 mt-0.5 flex items-center gap-1">
+                            <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                            <span>${workCount} work(s) associated</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <button onclick="editStaffMember('${s.id}')" title="Edit Member" class="p-2 text-indigo-600 bg-indigo-50/80 hover:bg-indigo-600 hover:text-white rounded-xl transition-all shadow-2xs active:scale-90">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                    </button>
+                    <button onclick="toggleStaffActive('${s.id}')" title="${isActive ? 'Deactivate Member' : 'Activate Member'}" class="p-2 ${isActive ? 'text-amber-600 bg-amber-50/80 hover:bg-amber-600 hover:text-white' : 'text-emerald-600 bg-emerald-50/80 hover:bg-emerald-600 hover:text-white'} rounded-xl transition-all shadow-2xs active:scale-90">
+                        ${isActive 
+                            ? '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path></svg>'
+                            : '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>'
+                        }
+                    </button>
+                    <button onclick="deleteStaffMember('${s.id}', '${s.name}')" title="Delete Member" class="p-2 text-rose-600 bg-rose-50/80 hover:bg-rose-600 hover:text-white rounded-xl transition-all shadow-2xs active:scale-90">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    let html = activeList.map((s, idx) => renderItem(s, idx, activeList)).join('');
+
+    if (deactiveList.length > 0) {
+        html += `
+            <div class="pt-5 pb-2.5 border-t border-dashed border-gray-200 mt-4 mb-2 flex items-center justify-between">
+                <span class="px-3 py-1 bg-gray-100/80 text-gray-500 rounded-full text-[11px] font-extrabold uppercase tracking-wider flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path></svg>
+                    <span>Deactivated Members (${deactiveList.length})</span>
+                </span>
+            </div>
+        `;
+        html += deactiveList.map((s, idx) => renderItem(s, idx, deactiveList)).join('');
+    }
+
+    container.innerHTML = html;
+}
+
+window.handleProfileIconClick = handleProfileIconClick;
+window.openStaffManagementModal = openStaffManagementModal;
+window.closeStaffManagementModal = closeStaffManagementModal;
+window.resetStaffForm = resetStaffForm;
+window.handleStaffAvatarFileChange = handleStaffAvatarFileChange;
+window.saveStaffMember = saveStaffMember;
+window.editStaffMember = editStaffMember;
+window.toggleStaffActive = toggleStaffActive;
+window.deleteStaffMember = deleteStaffMember;
+
+window.showAddStaffForm = showAddStaffForm;
+window.hideStaffForm = hideStaffForm;
+
+window.moveStaffOrder = moveStaffOrder;
+
+
+function refreshAppData(btn) {
+    if (btn) {
+        const svg = btn.querySelector('svg');
+        if (svg) svg.classList.add('animate-spin');
+    }
+    setTimeout(() => {
+        window.location.reload();
+    }, 150);
+}
+window.refreshAppData = refreshAppData;
