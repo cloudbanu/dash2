@@ -138,14 +138,32 @@ document.addEventListener('DOMContentLoaded', async function () {
         } catch(e) {}
     }
 
+    const DEFAULT_INITIAL_STAFF = [
+        { id: '1', name: 'Irshad', role: 'Administrator', avatar: 'https://icmlxulaxsacuvlkghlz.supabase.co/storage/v1/object/public/staff-avatars/irshad.jpg', is_active: true },
+        { id: '2', name: 'Niyas', role: 'Staff', avatar: 'https://icmlxulaxsacuvlkghlz.supabase.co/storage/v1/object/public/staff-avatars/niyas.jpg', is_active: true },
+        { id: '3', name: 'Muhammed', role: 'Staff', avatar: 'https://icmlxulaxsacuvlkghlz.supabase.co/storage/v1/object/public/staff-avatars/muhammed.jpg', is_active: true },
+        { id: '4', name: 'Noora', role: 'Staff', avatar: 'https://icmlxulaxsacuvlkghlz.supabase.co/storage/v1/object/public/staff-avatars/noora.jpg', is_active: true },
+        { id: '5', name: 'Nihana', role: 'Staff', avatar: 'https://icmlxulaxsacuvlkghlz.supabase.co/storage/v1/object/public/staff-avatars/Nihana.jpg', is_active: true },
+        { id: '6', name: 'Najil', role: 'Staff', avatar: 'https://icmlxulaxsacuvlkghlz.supabase.co/storage/v1/object/public/staff-avatars/najil.jpg', is_active: true },
+        { id: '7', name: 'Safvan', role: 'Staff', avatar: 'https://icmlxulaxsacuvlkghlz.supabase.co/storage/v1/object/public/staff-avatars/safvan.jpg', is_active: true }
+    ];
+
     const cachedStaffList = localStorage.getItem('staffListCache');
     if (cachedStaffList) {
         try {
-            staffList = getSortedStaffList(JSON.parse(cachedStaffList));
+            const parsed = JSON.parse(cachedStaffList);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                staffList = getSortedStaffList(parsed);
+            }
         } catch(e) {}
     }
 
-    // Immediately render login profiles and member tiles from cache on startup
+    if (!staffList || staffList.length === 0) {
+        staffList = DEFAULT_INITIAL_STAFF;
+    }
+
+    // Always fetch latest staff list and render login profiles immediately
+    refreshStaffList();
     renderLoginProfiles();
     renderMemberTiles();
 
@@ -164,7 +182,6 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         // Fetch background data
         refreshCategories();
-        refreshStaffList();
         refreshWorks();
         refreshEnquiries();
 
@@ -3896,18 +3913,27 @@ async function refreshStaffList() {
 
 function renderLoginProfiles() {
     const grid = document.getElementById('loginProfileGrid');
-    if (!grid || !staffList || staffList.length === 0) return;
+    if (!grid) return;
 
-    const sortedStaff = getSortedStaffList(staffList);
+    const listToRender = (staffList && staffList.length > 0) ? staffList : [
+        { id: '1', name: 'Irshad', role: 'Administrator', avatar: 'https://icmlxulaxsacuvlkghlz.supabase.co/storage/v1/object/public/staff-avatars/irshad.jpg', is_active: true },
+        { id: '2', name: 'Niyas', role: 'Staff', avatar: 'https://icmlxulaxsacuvlkghlz.supabase.co/storage/v1/object/public/staff-avatars/niyas.jpg', is_active: true },
+        { id: '3', name: 'Muhammed', role: 'Staff', avatar: 'https://icmlxulaxsacuvlkghlz.supabase.co/storage/v1/object/public/staff-avatars/muhammed.jpg', is_active: true },
+        { id: '4', name: 'Noora', role: 'Staff', avatar: 'https://icmlxulaxsacuvlkghlz.supabase.co/storage/v1/object/public/staff-avatars/noora.jpg', is_active: true },
+        { id: '5', name: 'Nihana', role: 'Staff', avatar: 'https://icmlxulaxsacuvlkghlz.supabase.co/storage/v1/object/public/staff-avatars/Nihana.jpg', is_active: true },
+        { id: '6', name: 'Najil', role: 'Staff', avatar: 'https://icmlxulaxsacuvlkghlz.supabase.co/storage/v1/object/public/staff-avatars/najil.jpg', is_active: true },
+        { id: '7', name: 'Safvan', role: 'Staff', avatar: 'https://icmlxulaxsacuvlkghlz.supabase.co/storage/v1/object/public/staff-avatars/safvan.jpg', is_active: true }
+    ];
+
+    const sortedStaff = getSortedStaffList(listToRender);
     const activeStaff = sortedStaff.filter(s => s.is_active !== false);
     grid.innerHTML = activeStaff.map(staff => {
         const avatar = staff.avatar || 'default-avatar.jpg';
         const role = staff.role || 'Staff Member';
-        const isDbStaff = !!staff.id;
         
         return `
             <button onclick="animateAndLogin(this, '${staff.name}', '${role}')"
-                class="w-full flex items-center gap-4 p-3 rounded-xl bg-white border border-gray-200 hover:border-indigo-500 hover:shadow-md transition-all duration-300 group">
+                class="w-full flex items-center gap-4 p-3 rounded-xl bg-white border border-gray-200 hover:border-indigo-500 hover:shadow-md transition-all duration-300 group cursor-pointer">
                 <div class="relative">
                     <img src="${avatar}" alt="${staff.name}"
                         class="w-12 h-12 rounded-full object-cover ring-2 ring-gray-100 group-hover:ring-indigo-500 transition-all" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
@@ -3929,9 +3955,19 @@ function renderLoginProfiles() {
 
 function renderMemberTiles() {
     const container = document.getElementById('memberTiles');
-    if (!container || !staffList || staffList.length === 0) return;
+    if (!container) return;
 
-    const sortedStaff = getSortedStaffList(staffList);
+    const listToRender = (staffList && staffList.length > 0) ? staffList : [
+        { id: '1', name: 'Irshad', role: 'Administrator', avatar: 'https://icmlxulaxsacuvlkghlz.supabase.co/storage/v1/object/public/staff-avatars/irshad.jpg', is_active: true },
+        { id: '2', name: 'Niyas', role: 'Staff', avatar: 'https://icmlxulaxsacuvlkghlz.supabase.co/storage/v1/object/public/staff-avatars/niyas.jpg', is_active: true },
+        { id: '3', name: 'Muhammed', role: 'Staff', avatar: 'https://icmlxulaxsacuvlkghlz.supabase.co/storage/v1/object/public/staff-avatars/muhammed.jpg', is_active: true },
+        { id: '4', name: 'Noora', role: 'Staff', avatar: 'https://icmlxulaxsacuvlkghlz.supabase.co/storage/v1/object/public/staff-avatars/noora.jpg', is_active: true },
+        { id: '5', name: 'Nihana', role: 'Staff', avatar: 'https://icmlxulaxsacuvlkghlz.supabase.co/storage/v1/object/public/staff-avatars/Nihana.jpg', is_active: true },
+        { id: '6', name: 'Najil', role: 'Staff', avatar: 'https://icmlxulaxsacuvlkghlz.supabase.co/storage/v1/object/public/staff-avatars/najil.jpg', is_active: true },
+        { id: '7', name: 'Safvan', role: 'Staff', avatar: 'https://icmlxulaxsacuvlkghlz.supabase.co/storage/v1/object/public/staff-avatars/safvan.jpg', is_active: true }
+    ];
+
+    const sortedStaff = getSortedStaffList(listToRender);
     const activeStaff = sortedStaff.filter(s => s.is_active !== false);
 
     let html = `
